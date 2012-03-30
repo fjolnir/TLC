@@ -5,11 +5,11 @@ Written by Fjõlnir Ásgeirsson <fjolnir at asgeirsson dot is>
 
 ## Simple Example
 ```lua
-objc = require("objc")
+local objc = require("objc")
 objc.loadFramework("AppKit")
 pool = objc.NSAutoreleasePool:new()
-objc.NSSpeechSynthesizer:new():startSpeakingString(objc.strToObj("Hello From Lua!"))
-os.execute("sleep "..3)
+objc.NSSpeechSynthesizer:new():startSpeakingString(objc.NSStr("Hello From Lua!"))
+os.execute("sleep "..2)
 ```
 
 ## Mini-Documentation
