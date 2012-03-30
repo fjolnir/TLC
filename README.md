@@ -15,6 +15,7 @@ os.execute("sleep "..2)
 ## Mini-Documentation
 
 TLC supports the following:
+
  * Loading frameworks
  * Accessing Objective-C objects
  * Calling methods on said objects
@@ -22,6 +23,7 @@ TLC supports the following:
  * Converting the basic lua types to objects (Explicitly)
 
 TLC Does not *yet* support the following:
+
  * Calling methods that take a variable number of arguments
 
 ### Loading TLC
