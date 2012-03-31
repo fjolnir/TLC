@@ -26,7 +26,18 @@ typedef NSDictionary NSCFDictionary;
 typedef NSDictionary NSMutableDictionary;
 typedef NSDictionary NSCFMutableDictionary;
 typedef NSDictionary __NSDictionaryM;
+
+IMP class_replaceMethod(Class cls, SEL name, IMP imp, const char *types);
+BOOL class_addMethod(Class cls, SEL name, IMP imp, const char *types);
+void method_exchangeImplementations(Method m1, Method m2);
+Method class_getInstanceMethod(Class aClass, SEL aSelector);
+IMP method_getImplementation(Method method);
+const char *method_getTypeEncoding(Method method);
 ]])
+
+local tlcutils = {}
+
+local C = ffi.C
 
 ffi.metatype("NSDictionary", {
 	__call = _objectCall,
@@ -64,3 +75,38 @@ ffi.metatype("NSArray", {
 	end
 })
 
+-- Swaps two methods of a class (They must have the same type signature)
+function tlcutils.swizzle(class, origSel, newSel)
+	local origMethod = C.class_getInstanceMethod(class, origSel)
+	local newMethod = C.class_getInstanceMethod(class, newSel)
+	if C.class_addMethod(class, origSel, C.method_getImplementation(newMethod), C.method_getTypeEncoding(newMethod)) == true then
+		C.class_replaceMethod(class, newSel, C.method_getImplementation(origMethod), C.method_getTypeEncoding(origMethod));
+	else
+		C.method_exchangeImplementations(origMethod, newMethod)
+	end
+end
+
+-- Adds a function as a method to the given class
+-- If the method already exists, it is renamed to __{selector}
+-- The function must have self (id), and selector (SEL) as it's first two arguments
+-- Defaults are to return void and to take an object and a selector
+function tlcutils.replaceMethod(class, selector, lambda, retType, argTypes)
+	retType = retType or "v"
+	argTypes = argTypes or {"@",":"}
+	local signature = objc.impSignatureForTypeEncoding(retType, argTypes)
+	local imp = ffi.cast(signature, lambda)
+	
+	local couldAddMethod = C.class_addMethod(class, selector, imp, retType..table.concat(argTypes))
+	print(couldAddMethod)
+	if couldAddMethod == 0 then
+		-- If the method already exists, we just add the new method as old{selector} and swizzle them
+		local newSel = objc.SEL("__"..objc.selToStr(selector))
+		if C.class_addMethod(class, newSel, imp, retType..table.concat(argTypes)) == 1 then
+			tlcutils.swizzle(class, selector, newSel)
+		else
+			error("Couldn't replace method")
+		end
+	end
+end
+
+return tlcutils
