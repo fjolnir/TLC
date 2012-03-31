@@ -819,4 +819,4 @@ typedef CFIndex CFByteOrder;
 
 ]])
 
-return ffi.C
+return ffi.load("/System/Library/CoreFoundation.framework/CoreFoundation")
