@@ -75,7 +75,8 @@ end
 ffi.cdef([[
 typedef struct objc_class *Class;
 struct objc_class { Class isa; };
-typedef struct objc_object { Class isa; } *id;
+struct objc_object { Class isa; };
+typedef struct objc_object *id;
 
 typedef struct objc_selector *SEL;
 typedef id (*IMP)(id, SEL, ...);
@@ -172,8 +173,8 @@ function objc.loadFramework(name)
 end
 
 if ffi.arch ~= "arm" then
-	objc.loadFramework("Foundation")
 	objc.loadFramework("CoreFoundation")
+	objc.loadFramework("Foundation")
 end
 
 objc.CGPoint = ffi.typeof("CGPoint")
@@ -306,8 +307,9 @@ end
 
 -- Convenience functions
 
-local function _objToStr(aObj) -- Used by calling tostring(object)
-	local str = aObj:description():UTF8String()
+function objc.objToStr(aObj) -- Automatically called with tostring(object)
+--	local str = C.CFStringGetCStringPtr(C.CFCopyDescription(aObj), C.kCFStringEncodingMacRoman)
+	local str = ffi.cast("id", aObj):description():UTF8String()
 	return ffi.string(str)
 end
 function objc.Obj(v)
@@ -321,6 +323,8 @@ function objc.Obj(v)
 		else
 			return objc.NSArr(v)
 		end
+	elseif type(v) == "cdata" then
+		return ffi.cast("id", v)
 	end
 	return nil
 end
@@ -352,7 +356,7 @@ ffi.metatype("struct objc_class", {
 	__call = function(self)
 		error("[objc] Classes are not callable\n"..debug.traceback())
 	end,
-	__tostring = _objToStr,
+	__tostring = objc.objToStr,
 	__index = function(unused,selArg)
 		return function(self, ...)
 			if self == nil then
@@ -417,61 +421,68 @@ ffi.metatype("struct objc_class", {
 	end
 })
 
-ffi.metatype("struct objc_object", {
-	__call = function(self)
-		error("[objc] Objects are not callable\n"..debug.traceback())
-	end,
-	__tostring = _objToStr,
-	__index = function(self,selArg, ...)
-		return function(self, ...)
-			if self == nil then
-				error("[objc] Self not passed. You probably used dot instead of colon syntax")
-				return nil
-			end
 
-			-- First try the cache
-			if objc.relaxedSyntax == true then
-				-- Append missing underscores to the selector
-				selArg = selArg .. ("_"):rep(#{...} - #selArg:gsub("[^_]", ""))
-			end
-			local className = ffi.string(C.object_getClassName(self))
-			local cached = (_instanceMethodCache[className] or _emptyTable)[selArg]
-			if cached ~= nil then
-				return cached(self, ...)
-			end
+local function _objectCall(self)
+	error("[objc] Objects are not callable\n"..debug.traceback())
+end
 
-			-- Else, load the method
-			local selStr = selArg:gsub("_", ":")
-			_log("Calling -["..className.." "..selStr.."]")
-
-			local method
-			local methodDesc = C.class_getInstanceMethod(C.object_getClass(self), SEL(selStr))
-			if methodDesc ~= nil then
-				method = _readMethod(methodDesc)
-			else
-				method = C.objc_msgSend
-			end
-
-			-- Cache the calling block and executeit
-			_instanceMethodCache[className] = _instanceMethodCache[className] or {}
-			_instanceMethodCache[className][selArg] = function(receiver, ...)
-				local success, ret = pcall(method, receiver, SEL(selStr), ...)
-				if success == false then
-					error(ret.."\n"..debug.traceback())
-				end
-
-				if ffi.istype("struct objc_object*", ret) and ret ~= nil and not (selStr == "retain" or selStr == "release") then
-					-- Retain objects that need to be retained
-					if not (selStr:sub(1,4) == "init" or selStr:sub(1,4) == "copy" or selStr:sub(1,11) == "mutableCopy") then
-						ret:retain()
-					end
-					ret = ffi.gc(ret, C.CFRelease)
-				end
-				return ret
-			end
-			return _instanceMethodCache[className][selArg](self, ...)
+-- Returns a function that takes an object reference and the arguments to pass to the method.
+function objc.getInstanceMethodCaller(self,selArg, ...)
+	return function(self, ...)
+		if self == nil then
+			error("[objc] Self not passed. You probably used dot instead of colon syntax")
+			return nil
 		end
+
+		self = ffi.cast("id", self)
+		-- First try the cache
+		if objc.relaxedSyntax == true then
+			-- Append missing underscores to the selector
+			selArg = selArg .. ("_"):rep(#{...} - #selArg:gsub("[^_]", ""))
+		end
+		local className = ffi.string(C.object_getClassName(self))
+		local cached = (_instanceMethodCache[className] or _emptyTable)[selArg]
+		if cached ~= nil then
+			return cached(self, ...)
+		end
+
+		-- Else, load the method
+		local selStr = selArg:gsub("_", ":")
+		_log("Calling -["..className.." "..selStr.."]")
+
+		local method
+		local methodDesc = C.class_getInstanceMethod(C.object_getClass(self), SEL(selStr))
+		if methodDesc ~= nil then
+			method = _readMethod(methodDesc)
+		else
+			method = C.objc_msgSend
+		end
+
+		-- Cache the calling block and executeit
+		_instanceMethodCache[className] = _instanceMethodCache[className] or {}
+		_instanceMethodCache[className][selArg] = function(receiver, ...)
+			local success, ret = pcall(method, receiver, SEL(selStr), ...)
+			if success == false then
+				error(ret.."\n"..debug.traceback())
+			end
+
+			if ffi.istype("struct objc_object*", ret) and ret ~= nil and not (selStr == "retain" or selStr == "release") then
+				-- Retain objects that need to be retained
+				if not (selStr:sub(1,4) == "init" or selStr:sub(1,4) == "copy" or selStr:sub(1,11) == "mutableCopy") then
+					ret:retain()
+				end
+				ret = ffi.gc(ret, C.CFRelease)
+			end
+			return ret
+		end
+		return _instanceMethodCache[className][selArg](self, ...)
 	end
+end
+
+ffi.metatype("struct objc_object", {
+	__call = _objectCall,
+	__tostring = objc.objToStr,
+	__index = objc.getInstanceMethodCaller
 })
 
 -- Blocks
