@@ -148,19 +148,6 @@ struct Object;
 
 local C = ffi.C
 
-ffi.load("/usr/lib/libobjc.A.dylib", true)
-
-setmetatable(objc, {
-	__index = function(t, key)
-		local ret = C.objc_getClass(key)
-		if ret == nil then
-			return nil
-		end
-		return ret
-	end
-})
-
-
 function objc.loadFramework(name)
 	local canRead = bit.lshift(1,2)
 	for i,path in pairs(objc.frameworkSearchPaths) do
@@ -173,6 +160,7 @@ function objc.loadFramework(name)
 end
 
 if ffi.arch ~= "arm" then
+	ffi.load("/usr/lib/libobjc.A.dylib", true)
 	objc.loadFramework("CoreFoundation")
 	objc.loadFramework("Foundation")
 end
@@ -182,6 +170,16 @@ objc.CGSize = ffi.typeof("CGSize")
 objc.CGRect = ffi.typeof("CGRect")
 objc.CGAffineTransform = ffi.typeof("CGAffineTransform")
 objc.NSRange = ffi.typeof("NSRange")
+
+setmetatable(objc, {
+	__index = function(t, key)
+		local ret = C.objc_getClass(key)
+		if ret == nil then
+			return nil
+		end
+		return ret
+	end
+})
 
 function objc.selToStr(sel)
 	return ffi.string(ffi.C.sel_getName(sel))
@@ -193,7 +191,7 @@ local SEL=function(str)
 end
 objc.SEL = SEL
 
--- Stores references to method wrappers
+-- Stores references to IMP(method) wrappers
 local _classMethodCache = {}
 local _instanceMethodCache = {}
 
@@ -293,13 +291,13 @@ function objc.impSignatureForMethod(method)
 	return objc.impSignatureForTypeEncoding(retType, argTypes)
 end
 
--- Returns the IMP of the method correctly typecast
+-- Returns the IMP of a method correctly typecast
 local function _readMethod(method)
 	local impTypeStr = objc.impSignatureForMethod(method)
 	if impTypeStr == nil then
 		return nil
 	end
-	_log("Loading method:", objc.selToStr(C.method_getName(method)), impTypeStr)
+	_log("Reading method:", objc.selToStr(C.method_getName(method)), impTypeStr)
 
 	local imp = C.method_getImplementation(method);
 	return ffi.cast(impTypeStr, imp)
@@ -308,10 +306,11 @@ end
 -- Convenience functions
 
 function objc.objToStr(aObj) -- Automatically called with tostring(object)
---	local str = C.CFStringGetCStringPtr(C.CFCopyDescription(aObj), C.kCFStringEncodingMacRoman)
 	local str = ffi.cast("id", aObj):description():UTF8String()
 	return ffi.string(str)
 end
+
+-- Converts a lua type to an objc object
 function objc.Obj(v)
 	if type(v) == "number" then
 		return objc.NSNum(v)
@@ -408,15 +407,6 @@ ffi.metatype("struct objc_class", {
 				return ret
 			end
 			return _classMethodCache[className][selArg](self, ...)
-		end
-	end,
-	-- Grafts a lua function onto the class as an instance method, it will only be callable from lua though
-	__newindex = function(self,selStr,lambda)
-		local className = ffi.string(C.class_getName(self))
-		_instanceMethodCache[className] = _instanceMethodCache[className] or {}
-		local methods = _instanceMethodCache[className]
-		if not (methods == nil) then
-			methods[selStr] = lambda
 		end
 	end
 })
