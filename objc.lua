@@ -350,6 +350,34 @@ end
 
 -- Method calls
 
+-- Takes a selector string (with colons replaced by underscores) and returns the number of arguments)
+function _argCountForSelArg(selArg)
+	local counting = false
+	local count = 0
+	for i=1,#selArg do
+		if counting == false then
+			counting = (selArg:sub(i,i) ~= "_")
+		elseif selArg:sub(i,i) == "_" then
+			count = count + 1
+		end
+	end
+	return count
+end
+
+-- Replaces all underscores except the ones at the beginning of the string by colons
+function _selectorFromSelArg(selArg)
+	local replacing = false
+	local count = 0
+	for i=1,#selArg do
+		if replacing == false then
+			replacing = (selArg:sub(i,i) ~= "_")
+		elseif selArg:sub(i,i) == "_" then
+			selArg = table.concat{selArg:sub(1,i-1), ":", selArg:sub(i+1)}
+		end
+	end
+	return selArg
+end
+
 local _emptyTable = {} -- Keep an empty table around so we don't have to create a new one every time a method is called
 ffi.metatype("struct objc_class", {
 	__call = function(self)
@@ -365,7 +393,7 @@ ffi.metatype("struct objc_class", {
 
 			if objc.relaxedSyntax == true then
 				-- Append missing underscores to the selector
-				selArg = selArg .. ("_"):rep(#{...} - #selArg:gsub("[^_]", ""))
+				selArg = selArg .. ("_"):rep(#{...} - _argCountForSelArg(selArg))
 			end
 
 			-- First try the cache
@@ -376,7 +404,7 @@ ffi.metatype("struct objc_class", {
 			end
 
 			-- Else, load the method
-			local selStr = selArg:gsub("_", ":")
+			local selStr = _selectorFromSelArg(selArg)
 			
 			if objc.debug then _log("Calling +["..className.." "..selStr.."]") end
 
@@ -428,7 +456,7 @@ function objc.getInstanceMethodCaller(self,selArg, ...)
 		-- First try the cache
 		if objc.relaxedSyntax == true then
 			-- Append missing underscores to the selector
-			selArg = selArg .. ("_"):rep(#{...} - #selArg:gsub("[^_]", ""))
+			selArg = selArg .. ("_"):rep(#{...} - _argCountForSelArg(selArg))
 		end
 		local className = ffi.string(C.object_getClassName(self))
 		local cached = (_instanceMethodCache[className] or _emptyTable)[selArg]
@@ -437,7 +465,7 @@ function objc.getInstanceMethodCaller(self,selArg, ...)
 		end
 
 		-- Else, load the method
-		local selStr = selArg:gsub("_", ":")
+		local selStr = _selectorFromSelArg(selArg)
 		_log("Calling -["..className.." "..selStr.."]")
 
 		local method
