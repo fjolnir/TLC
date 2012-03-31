@@ -178,7 +178,7 @@ typedef void (*CFArrayApplierFunction)(const void *value, void *context);
 //typedef const struct __CFArray * CFArrayRef;
 typedef const CFTypeRef CFArrayRef;
 //typedef struct __CFArray * CFMutableArrayRef;
-typedef struct CFTypeRef CFMutableArrayRef;
+typedef CFTypeRef CFMutableArrayRef;
 CFTypeID CFArrayGetTypeID(void);
 CFArrayRef CFArrayCreate(CFAllocatorRef allocator, const void **values, CFIndex numValues, const CFArrayCallBacks *callBacks);
 CFArrayRef CFArrayCreateCopy(CFAllocatorRef allocator, CFArrayRef theArray);
@@ -235,7 +235,7 @@ typedef void (*CFDictionaryApplierFunction)(const void *key, const void *value, 
 //typedef const struct __CFDictionary * CFDictionaryRef;
 typedef const CFTypeRef CFDictionaryRef;
 //typedef struct __CFDictionary * CFMutableDictionaryRef;
-typedef struct CFTypeRef CFMutableDictionaryRef;
+typedef CFTypeRef CFMutableDictionaryRef;
 CFTypeID CFDictionaryGetTypeID(void);
 
 CFDictionaryRef CFDictionaryCreate(CFAllocatorRef allocator, const void **keys, const void **values, CFIndex numValues, const CFDictionaryKeyCallBacks *keyCallBacks, const CFDictionaryValueCallBacks *valueCallBacks);
@@ -265,7 +265,7 @@ void CFDictionaryRemoveAllValues(CFMutableDictionaryRef theDict);
 //typedef const struct __CFData * CFDataRef;
 typedef const CFTypeRef CFDataRef;
 //typedef struct __CFData * CFMutableDataRef;
-typedef struct CFTypeRef CFMutableDataRef;
+typedef CFTypeRef CFMutableDataRef;
 CFTypeID CFDataGetTypeID(void);
 CFDataRef CFDataCreate(CFAllocatorRef allocator, const UInt8 *bytes, CFIndex length);
 CFDataRef CFDataCreateWithBytesNoCopy(CFAllocatorRef allocator, const UInt8 *bytes, CFIndex length, CFAllocatorRef bytesDeallocator);
@@ -364,7 +364,7 @@ const CFStringRef kCFISO8601Calendar;
 //typedef const struct __CFCharacterSet * CFCharacterSetRef;
 typedef const CFTypeRef CFCharacterSetRef;
 //typedef struct __CFCharacterSet * CFMutableCharacterSetRef;
-typedef struct CFTypeRef CFMutableCharacterSetRef;
+typedef CFTypeRef CFMutableCharacterSetRef;
 enum {
     kCFCharacterSetControl = 1, /* Control character set (Unicode General Category Cc and Cf) */
     kCFCharacterSetWhitespace, /* Whitespace character set (Unicode General Category Zs and U0009 CHARACTER TABULATION) */
@@ -589,7 +589,7 @@ void CFShow(CFTypeRef obj);
 void CFShowStr(CFStringRef str);
 
 // CFError
-typedef struct CFTypeRef CFErrorRef;
+typedef CFTypeRef CFErrorRef;
 CFTypeID CFErrorGetTypeID(void);
 // Predefined domains; value of "code" will correspond to preexisting values in these domains.
 const CFStringRef kCFErrorDomainPOSIX;
@@ -810,6 +810,12 @@ CFDataRef CFURLCreateBookmarkDataFromAliasRecord ( CFAllocatorRef allocatorRef, 
 Boolean CFURLStartAccessingSecurityScopedResource(CFURLRef url); // Available in MacOS X 10.7.3 and later
 void CFURLStopAccessingSecurityScopedResource(CFURLRef url);
 
+enum __CFByteOrder {
+    CFByteOrderUnknown,
+    CFByteOrderLittleEndian,
+    CFByteOrderBigEndian
+};
+typedef CFIndex CFByteOrder;
 
 ]])
 
