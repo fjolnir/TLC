@@ -292,7 +292,7 @@ function objc.impSignatureForMethod(method)
 end
 
 -- Returns the IMP of a method correctly typecast
-local function _readMethod(method)
+function objc.impForMethod(method)
 	local impTypeStr = objc.impSignatureForMethod(method)
 	if impTypeStr == nil then
 		return nil
@@ -411,7 +411,7 @@ ffi.metatype("struct objc_class", {
 			local method
 			local methodDesc = C.class_getClassMethod(self, SEL(selStr))
 			if methodDesc ~= nil then
-				method = _readMethod(methodDesc)
+				method = objc.impForMethod(methodDesc)
 			else
 				method = C.objc_msgSend
 			end
@@ -471,7 +471,7 @@ function objc.getInstanceMethodCaller(self,selArg, ...)
 		local method
 		local methodDesc = C.class_getInstanceMethod(C.object_getClass(self), SEL(selStr))
 		if methodDesc ~= nil then
-			method = _readMethod(methodDesc)
+			method = objc.impForMethod(methodDesc)
 		else
 			method = C.objc_msgSend
 		end
