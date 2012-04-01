@@ -102,7 +102,6 @@ function tlcutils.addMethod(class, selector, lambda, retType, argTypes)
 	local imp = ffi.cast(signature, lambda)
 	
 	local couldAddMethod = C.class_addMethod(class, selector, imp, retType..table.concat(argTypes))
-	print(couldAddMethod)
 	if couldAddMethod == 0 then
 		-- If the method already exists, we just add the new method as old{selector} and swizzle them
 		local newSel = objc.SEL("__"..objc.selToStr(selector))
@@ -114,12 +113,14 @@ function tlcutils.addMethod(class, selector, lambda, retType, argTypes)
 	end
 end
 
+-- Creates and returns a new subclass of superclass (or if superclass is nil, a new root class)
 function tlcutils.createClass(superclass, className)
 	local class = C.objc_allocateClassPair(superclass, className, 0)
 	C.objc_registerClassPair(class)
 	return class
 end
 
+-- Calls the superclass's implementation of a method
 function tlcutils.callSuper(self, selector, ...)
 	local superClass = C.class_getSuperclass(C.object_getClass(self))
 	local method = C.class_getInstanceMethod(superClass, selector)
