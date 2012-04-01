@@ -382,6 +382,14 @@ function _selectorFromSelArg(selArg)
 	return selArg
 end
 
+-- Used as a __newindex metamethod
+local function _setter(self, key, value)
+	-- Try calling setKey:value
+	local selector = "set"..key:sub(1,1):upper()..key:sub(2).."_"
+	return self[selector](self, value)
+end
+
+
 local _emptyTable = {} -- Keep an empty table around so we don't have to create a new one every time a method is called
 ffi.metatype("struct objc_class", {
 	__call = function(self)
@@ -439,16 +447,12 @@ ffi.metatype("struct objc_class", {
 			end
 			return _classMethodCache[className][selArg](self, ...)
 		end
-	end
+	end,
+	__newindex = _setter
 })
 
-
-local function _objectCall(self)
-	error("[objc] Objects are not callable\n"..debug.traceback())
-end
-
 -- Returns a function that takes an object reference and the arguments to pass to the method.
-function objc.getInstanceMethodCaller(self,selArg, ...)
+function objc.getInstanceMethodCaller(self,selArg)
 	return function(self, ...)
 		if self == nil then
 			error("[objc] Self not passed. You probably used dot instead of colon syntax")
@@ -502,9 +506,12 @@ function objc.getInstanceMethodCaller(self,selArg, ...)
 end
 
 ffi.metatype("struct objc_object", {
-	__call = _objectCall,
+	__call = function(self)
+		error("[objc] Objects are not callable\n"..debug.traceback())
+	end,
 	__tostring = objc.objToStr,
-	__index = objc.getInstanceMethodCaller
+	__index = objc.getInstanceMethodCaller,
+	__newindex = _setter
 })
 
 -- Blocks
