@@ -33,6 +33,11 @@ void method_exchangeImplementations(Method m1, Method m2);
 Method class_getInstanceMethod(Class aClass, SEL aSelector);
 IMP method_getImplementation(Method method);
 const char *method_getTypeEncoding(Method method);
+
+Class objc_allocateClassPair(Class superclass, const char *name, size_t extraBytes);
+void objc_registerClassPair(Class cls);
+
+Class class_getSuperclass(Class cls);
 ]])
 
 local tlcutils = {}
@@ -107,6 +112,18 @@ function tlcutils.addMethod(class, selector, lambda, retType, argTypes)
 			error("Couldn't replace method")
 		end
 	end
+end
+
+function tlcutils.createClass(superclass, className)
+	local class = C.objc_allocateClassPair(superclass, className, 0)
+	C.objc_registerClassPair(class)
+	return class
+end
+
+function tlcutils.callSuper(self, selector, ...)
+	local superClass = C.class_getSuperclass(C.object_getClass(self))
+	local method = C.class_getInstanceMethod(superClass, selector)
+	return objc.impForMethod(method)(self, selector, ...)
 end
 
 return tlcutils
