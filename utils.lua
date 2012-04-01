@@ -44,6 +44,10 @@ local tlcutils = {}
 
 local C = ffi.C
 
+local function _objectCall()
+	error("[objc] Objects are not callable\n"..debug.traceback())
+end
+
 ffi.metatype("NSDictionary", {
 	__call = _objectCall,
 	__tostring = objc.objToStr,
@@ -100,7 +104,8 @@ function tlcutils.addMethod(class, selector, lambda, retType, argTypes)
 	argTypes = argTypes or {"@",":"}
 	local signature = objc.impSignatureForTypeEncoding(retType, argTypes)
 	local imp = ffi.cast(signature, lambda)
-	
+	imp = ffi.cast("IMP", imp)
+
 	local couldAddMethod = C.class_addMethod(class, selector, imp, retType..table.concat(argTypes))
 	if couldAddMethod == 0 then
 		-- If the method already exists, we just add the new method as old{selector} and swizzle them
