@@ -195,6 +195,10 @@ objc.SEL = SEL
 local _classMethodCache = {}
 local _instanceMethodCache = {}
 
+local _classNameCache = setmetatable({}, { __mode = "k" })
+local _idType = ffi.typeof("struct objc_object*")
+
+
 -- Takes a single ObjC type encoded, and converts it to a C type specifier
 local _typeEncodings = {
 	["@"] = "id", ["#"] = "Class", ["c"] = "char", ["C"] = "unsigned char",
@@ -306,7 +310,7 @@ end
 -- Convenience functions
 
 function objc.objToStr(aObj) -- Automatically called with tostring(object)
-	local str = ffi.cast("id", aObj):description():UTF8String()
+	local str = ffi.cast(_idType, aObj):description():UTF8String()
 	return ffi.string(str)
 end
 
@@ -323,7 +327,7 @@ function objc.Obj(v)
 			return objc.NSArr(v)
 		end
 	elseif type(v) == "cdata" then
-		return ffi.cast("id", v)
+		return ffi.cast(_idType, v)
 	end
 	return nil
 end
@@ -378,7 +382,6 @@ function _selectorFromSelArg(selArg)
 	return selArg
 end
 
-local _classNameCache = setmetatable({}, { __mode = "k" })
 local _emptyTable = {} -- Keep an empty table around so we don't have to create a new one every time a method is called
 ffi.metatype("struct objc_class", {
 	__call = function(self)
@@ -419,12 +422,12 @@ ffi.metatype("struct objc_class", {
 			local className = _classNameCache[self]
 			_classMethodCache[className] = _classMethodCache[className] or {}
 			_classMethodCache[className][selArg] = function(receiver, ...)
-				local success, ret = pcall(method, ffi.cast("id", receiver), SEL(selStr), ...)
+				local success, ret = pcall(method, ffi.cast(_idType, receiver), SEL(selStr), ...)
 				if success == false then
 					error(ret.."\n"..debug.traceback())
 				end
 
-				if ffi.istype("struct objc_object*", ret) and ret ~= nil then
+				if ffi.istype(_idType, ret) and ret ~= nil then
 					if (selStr:sub(1,5) ~= "alloc" and selStr ~= "new")  then
 						ret:retain()
 					end
@@ -452,7 +455,7 @@ function objc.getInstanceMethodCaller(self,selArg, ...)
 			return nil
 		end
 
-		--self = ffi.cast("id", self)
+		self = ffi.cast(_idType, self)
 		-- First try the cache
 		if objc.relaxedSyntax == true then
 			-- Append missing underscores to the selector
@@ -485,7 +488,7 @@ function objc.getInstanceMethodCaller(self,selArg, ...)
 				error(ret.."\n"..debug.traceback())
 			end
 
-			if ffi.istype("struct objc_object*", ret) and ret ~= nil and not (selStr == "retain" or selStr == "release") then
+			if ffi.istype(_idType, ret) and ret ~= nil and not (selStr == "retain" or selStr == "release") then
 				-- Retain objects that need to be retained
 				if not (selStr:sub(1,4) == "init" or selStr:sub(1,4) == "copy" or selStr:sub(1,11) == "mutableCopy") then
 					ret:retain()
@@ -527,18 +530,19 @@ local function _createBlockWrapper(lambda, retType, argTypes)
 end
 
 -- Creates a block and returns it typecast to 'id'
+local _blockType = ffi.typeof("struct __block_literal_1")
 function objc.createBlock(lambda, retType, argTypes)
 	if not lambda then
 		return nil
 	end
-	local block = ffi.new("struct __block_literal_1")
+	local block = _blockType()
 	block.isa = C._NSConcreteGlobalBlock
 	block.flags = bit.lshift(1, 29)
 	block.reserved = 0
 	block.invoke = ffi.cast("void*", _createBlockWrapper(lambda, retType, argTypes))
 	block.descriptor = _sharedBlockDescriptor
 
-	return ffi.cast("id", block)
+	return ffi.cast(_idType, block)
 end
 
 return objc
