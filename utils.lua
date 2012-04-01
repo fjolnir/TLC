@@ -90,7 +90,7 @@ end
 -- If the method already exists, it is renamed to __{selector}
 -- The function must have self (id), and selector (SEL) as it's first two arguments
 -- Defaults are to return void and to take an object and a selector
-function tlcutils.replaceMethod(class, selector, lambda, retType, argTypes)
+function tlcutils.addMethod(class, selector, lambda, retType, argTypes)
 	retType = retType or "v"
 	argTypes = argTypes or {"@",":"}
 	local signature = objc.impSignatureForTypeEncoding(retType, argTypes)
