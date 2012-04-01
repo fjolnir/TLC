@@ -378,6 +378,7 @@ function _selectorFromSelArg(selArg)
 	return selArg
 end
 
+local _classNameCache = setmetatable({}, { __mode = "k" })
 local _emptyTable = {} -- Keep an empty table around so we don't have to create a new one every time a method is called
 ffi.metatype("struct objc_class", {
 	__call = function(self)
@@ -397,16 +398,13 @@ ffi.metatype("struct objc_class", {
 			end
 
 			-- First try the cache
-			local className = ffi.string(C.class_getName(self))
-			local cached = (_classMethodCache[className] or _emptyTable)[selArg]
+			local cached = (_classMethodCache[_classNameCache[self]] or _emptyTable)[selArg]
 			if cached ~= nil then
 				return cached(self, ...)
 			end
 
 			-- Else, load the method
 			local selStr = _selectorFromSelArg(selArg)
-			
-			if objc.debug then _log("Calling +["..className.." "..selStr.."]") end
 
 			local method
 			local methodDesc = C.class_getClassMethod(self, SEL(selStr))
@@ -417,6 +415,8 @@ ffi.metatype("struct objc_class", {
 			end
 
 			-- Cache the calling block and execute it
+			_classNameCache[self] = _classNameCache[self] or ffi.string(C.class_getName(self))
+			local className = _classNameCache[self]
 			_classMethodCache[className] = _classMethodCache[className] or {}
 			_classMethodCache[className][selArg] = function(receiver, ...)
 				local success, ret = pcall(method, ffi.cast("id", receiver), SEL(selStr), ...)
@@ -452,34 +452,35 @@ function objc.getInstanceMethodCaller(self,selArg, ...)
 			return nil
 		end
 
-		self = ffi.cast("id", self)
+		--self = ffi.cast("id", self)
 		-- First try the cache
 		if objc.relaxedSyntax == true then
 			-- Append missing underscores to the selector
 			selArg = selArg .. ("_"):rep(#{...} - _argCountForSelArg(selArg))
 		end
-		local className = ffi.string(C.object_getClassName(self))
-		local cached = (_instanceMethodCache[className] or _emptyTable)[selArg]
+
+		local cached = (_instanceMethodCache[_classNameCache[self] ] or _emptyTable)[selArg]
 		if cached ~= nil then
 			return cached(self, ...)
 		end
 
 		-- Else, load the method
 		local selStr = _selectorFromSelArg(selArg)
-		_log("Calling -["..className.." "..selStr.."]")
 
-		local method
+		local imp
 		local methodDesc = C.class_getInstanceMethod(C.object_getClass(self), SEL(selStr))
 		if methodDesc ~= nil then
-			method = objc.impForMethod(methodDesc)
+			imp = objc.impForMethod(methodDesc)
 		else
-			method = C.objc_msgSend
+			imp = C.objc_msgSend
 		end
 
-		-- Cache the calling block and executeit
+		-- Cache the calling block and execute it
+		_classNameCache[self] = _classNameCache[self] or ffi.string(C.object_getClassName(self))
+		local className = _classNameCache[self]
 		_instanceMethodCache[className] = _instanceMethodCache[className] or {}
 		_instanceMethodCache[className][selArg] = function(receiver, ...)
-			local success, ret = pcall(method, receiver, SEL(selStr), ...)
+			local success, ret = pcall(imp, receiver, SEL(selStr), ...)
 			if success == false then
 				error(ret.."\n"..debug.traceback())
 			end
