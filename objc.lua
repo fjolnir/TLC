@@ -15,27 +15,6 @@
 -- ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 -- OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
--- Usage:
--- Accessing a class: MyClass = objc.MyClass
--- Loading a framework: objc.loadFramework("AppKit")
-   -- Foundation is loaded by default.
-   -- The table objc.frameworkSearchPaths, contains a list of paths to search (formatted like /System/Library/Frameworks/%s.framework/%s)
--- Creating objects: MyClass:new() or MyClass:alloc():init()
-   -- Retaining&Releasing objects is handled by the lua garbage collector so you should never need to call retain/release
--- Calling methods: myInstance:doThis_withThis_andThat(this, this, that)
-   -- Colons in selectors are converted to underscores (last one being optional)
--- Creating blocks: objc.createBlock(myFunction, returnType, argTypes)
-   -- returnType: An encoded type specifying what the block should return (Consult https://developer.apple.com/library/mac/#documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html for reference)
-   -- argTypes: An array of encoded types specifying the argument types the block expects
-   -- Both return and argument types default to void if none are passed
-
--- Demo:
--- objc = require("objc")
--- objc.loadFramework("AppKit")
--- pool = objc.NSAutoreleasePool:new()
--- objc.NSSpeechSynthesizer:new():startSpeakingString(objc.NSStr("Hello From Lua!"))
--- os.execute("sleep "..2)
-
 local ffi = require("ffi")
 
 local objc = {
@@ -110,21 +89,6 @@ void CFRelease(id obj);
 
 // Used to check if a file exists
 int access(const char *path, int amode);
-
-// http://clang.llvm.org/docs/Block-ABI-Apple.txt
-struct __block_descriptor_1 {
-	unsigned long int reserved; // NULL
-	unsigned long int size; // sizeof(struct __block_literal_1)
-}
-
-struct __block_literal_1 {
-	struct __block_literal_1 *isa;
-	int flags;
-	int reserved;
-	void *invoke;
-	struct __block_descriptor_1 *descriptor;
-}
-struct __block_literal_1 *_NSConcreteGlobalBlock;
 
 // NSObject dependencies
 typedef struct CGPoint { CGFloat x; CGFloat y; } CGPoint;
@@ -514,43 +478,4 @@ ffi.metatype("struct objc_object", {
 	__newindex = _setter
 })
 
--- Blocks
-
-local _sharedBlockDescriptor = ffi.new("struct __block_descriptor_1")
-_sharedBlockDescriptor.reserved = 0;
-_sharedBlockDescriptor.size = ffi.sizeof("struct __block_literal_1")
-
--- Wraps a function to be used with a block
-local function _createBlockWrapper(lambda, retType, argTypes)
-	-- Build a function definition string to cast to
-	retType = retType or "v"
-	argTypes = argTypes or {}
-	table.insert(argTypes, 1, "^v")
-
-	local funTypeStr = objc.impSignatureForTypeEncoding(retType, argTypes)
-	_log("Created block with signature:", funTypeStr)
-
-	ret = function(theBlock, ...)
-		return lambda(...)
-	end
-	return ffi.cast(funTypeStr, ret)
-end
-
--- Creates a block and returns it typecast to 'id'
-local _blockType = ffi.typeof("struct __block_literal_1")
-function objc.createBlock(lambda, retType, argTypes)
-	if not lambda then
-		return nil
-	end
-	local block = _blockType()
-	block.isa = C._NSConcreteGlobalBlock
-	block.flags = bit.lshift(1, 29)
-	block.reserved = 0
-	block.invoke = ffi.cast("void*", _createBlockWrapper(lambda, retType, argTypes))
-	block.descriptor = _sharedBlockDescriptor
-
-	return ffi.cast(_idType, block)
-end
-
 return objc
-

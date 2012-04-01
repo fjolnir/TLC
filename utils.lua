@@ -1,5 +1,10 @@
 -- Defines metatypes for NSDictionary&NSArray (And their mutable equivalents) to make them nicer to work with
--- Currently you must explicitly cast an object to use them. (This will hopefully change in a future version)
+   -- Currently you must explicitly cast an object to use them. (This will hopefully change in a future version)
+
+-- Creating blocks: createBlock(myFunction, returnType, argTypes)
+   -- returnType: An encoded type specifying what the block should return (Consult https://developer.apple.com/library/mac/#documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html for reference)
+   -- argTypes: An array of encoded types specifying the argument types the block expects
+
 
 -- Example:
 -- myDict = ffi.cast("NSMutableDictionary", aObject:getDict())
@@ -38,6 +43,21 @@ Class objc_allocateClassPair(Class superclass, const char *name, size_t extraByt
 void objc_registerClassPair(Class cls);
 
 Class class_getSuperclass(Class cls);
+
+// http://clang.llvm.org/docs/Block-ABI-Apple.txt
+struct __block_descriptor_1 {
+	unsigned long int reserved; // NULL
+	unsigned long int size; // sizeof(struct __block_literal_1)
+}
+
+struct __block_literal_1 {
+	struct __block_literal_1 *isa;
+	int flags;
+	int reserved;
+	void *invoke;
+	struct __block_descriptor_1 *descriptor;
+}
+struct __block_literal_1 *_NSConcreteGlobalBlock;
 ]])
 
 local tlcutils = {}
@@ -84,6 +104,24 @@ ffi.metatype("NSArray", {
 	end
 })
 
+
+-- Class introspection and extension
+
+
+-- Creates and returns a new subclass of superclass (or if superclass is nil, a new root class)
+function tlcutils.createClass(superclass, className)
+	local class = C.objc_allocateClassPair(superclass, className, 0)
+	C.objc_registerClassPair(class)
+	return class
+end
+
+-- Calls the superclass's implementation of a method
+function tlcutils.callSuper(self, selector, ...)
+	local superClass = C.class_getSuperclass(C.object_getClass(self))
+	local method = C.class_getInstanceMethod(superClass, selector)
+	return objc.impForMethod(method)(self, selector, ...)
+end
+
 -- Swaps two methods of a class (They must have the same type signature)
 function tlcutils.swizzle(class, origSel, newSel)
 	local origMethod = C.class_getInstanceMethod(class, origSel)
@@ -118,18 +156,42 @@ function tlcutils.addMethod(class, selector, lambda, retType, argTypes)
 	end
 end
 
--- Creates and returns a new subclass of superclass (or if superclass is nil, a new root class)
-function tlcutils.createClass(superclass, className)
-	local class = C.objc_allocateClassPair(superclass, className, 0)
-	C.objc_registerClassPair(class)
-	return class
+
+-- Blocks
+
+local _sharedBlockDescriptor = ffi.new("struct __block_descriptor_1")
+_sharedBlockDescriptor.reserved = 0;
+_sharedBlockDescriptor.size = ffi.sizeof("struct __block_literal_1")
+
+-- Wraps a function to be used with a block
+local function _createBlockWrapper(lambda, retType, argTypes)
+	-- Build a function definition string to cast to
+	retType = retType or "v"
+	argTypes = argTypes or {}
+	table.insert(argTypes, 1, "^v")
+
+	local funTypeStr = objc.impSignatureForTypeEncoding(retType, argTypes)
+
+	ret = function(theBlock, ...)
+		return lambda(...)
+	end
+	return ffi.cast(funTypeStr, ret)
 end
 
--- Calls the superclass's implementation of a method
-function tlcutils.callSuper(self, selector, ...)
-	local superClass = C.class_getSuperclass(C.object_getClass(self))
-	local method = C.class_getInstanceMethod(superClass, selector)
-	return objc.impForMethod(method)(self, selector, ...)
+-- Creates a block and returns it typecast to 'id'
+local _blockType = ffi.typeof("struct __block_literal_1")
+function tlcutils.createBlock(lambda, retType, argTypes)
+	if not lambda then
+		return nil
+	end
+	local block = _blockType()
+	block.isa = C._NSConcreteGlobalBlock
+	block.flags = bit.lshift(1, 29)
+	block.reserved = 0
+	block.invoke = ffi.cast("void*", _createBlockWrapper(lambda, retType, argTypes))
+	block.descriptor = _sharedBlockDescriptor
+
+	return ffi.cast(_idType, block)
 end
 
 return tlcutils
