@@ -819,4 +819,8 @@ typedef CFIndex CFByteOrder;
 
 ]])
 
-return ffi.load("/System/Library/CoreFoundation.framework/CoreFoundation")
+if ffi.arch ~= "arm" then
+	return ffi.load("/System/Library/CoreFoundation.framework/CoreFoundation")
+else
+	return ffi.C -- On iOS we will always be embedded => CoreFoundation already loaded
+end
