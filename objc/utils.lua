@@ -4,10 +4,11 @@
 
 
 local objc = require("objc")
-local cf = require("objc.CoreFoundation")
 local ffi = require("ffi")
 
-ffi.cdef([[
+local tlcutils = {}
+
+ffi.cdef[[
 IMP class_replaceMethod(Class cls, SEL name, IMP imp, const char *types);
 BOOL class_addMethod(Class cls, SEL name, IMP imp, const char *types);
 void method_exchangeImplementations(Method m1, Method m2);
@@ -34,14 +35,9 @@ struct __block_literal_1 {
 	struct __block_descriptor_1 *descriptor;
 }
 struct __block_literal_1 *_NSConcreteGlobalBlock;
-]])
-
-local tlcutils = {}
+]]
 
 local C = ffi.C
-
--- Class introspection and extension
-
 
 -- Creates and returns a new subclass of superclass (or if superclass is nil, a new root class)
 function tlcutils.createClass(superclass, className)
@@ -116,7 +112,6 @@ local function _createBlockWrapper(lambda, retType, argTypes)
 	local funTypeStr = objc.impSignatureForTypeEncoding(retType, argTypes)
 
 	ret = function(theBlock, ...)
-		print("block call")
 		return lambda(...)
 	end
 	return ffi.cast(funTypeStr, ret)
