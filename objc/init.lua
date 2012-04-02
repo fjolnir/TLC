@@ -51,7 +51,7 @@ else
 	]])
 end
 
-ffi.cdef([[
+ffi.cdef[[
 typedef struct objc_class *Class;
 struct objc_class { Class isa; };
 struct objc_object { Class isa; };
@@ -109,7 +109,7 @@ struct __CFArray;
 struct __CFAllocator;
 struct _NSModalSession;
 struct Object;
-]])
+]]
 
 local C = ffi.C
 
@@ -142,6 +142,7 @@ setmetatable(objc, {
 		if ret == nil then
 			return nil
 		end
+		t[key] = ret
 		return ret
 	end
 })
@@ -157,8 +158,8 @@ end
 objc.SEL = SEL
 
 -- Stores references to IMP(method) wrappers
-local _classMethodCache = {}
-local _instanceMethodCache = {}
+local _classMethodCache = {}; objc.classMethodCache = _classMethodCache
+local _instanceMethodCache = {}; objc.instanceMethodCache = _instanceMethodCache
 
 local _classNameCache = setmetatable({}, { __mode = "k" })
 local _idType = ffi.typeof("struct objc_object*")
