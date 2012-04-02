@@ -144,14 +144,22 @@ function tlcutils.addMethod(class, selector, lambda, retType, argTypes)
 	local imp = ffi.cast(signature, lambda)
 	imp = ffi.cast("IMP", imp)
 
+	-- If one exists, the existing/super method will be renamed to this selector
+	local renamedSel = objc.SEL("__"..objc.selToStr(selector))
+	
 	local couldAddMethod = C.class_addMethod(class, selector, imp, retType..table.concat(argTypes))
 	if couldAddMethod == 0 then
 		-- If the method already exists, we just add the new method as old{selector} and swizzle them
-		local newSel = objc.SEL("__"..objc.selToStr(selector))
 		if C.class_addMethod(class, newSel, imp, retType..table.concat(argTypes)) == 1 then
 			tlcutils.swizzle(class, selector, newSel)
 		else
 			error("Couldn't replace method")
+		end
+	else
+		local superClass = C.class_getSuperclass(class)
+		local superMethod = C.class_getInstanceMethod(superClass, selector)
+		if superMethod ~= nil then
+			C.class_addMethod(class, renamedSel, C.method_getImplementation(superMethod), C.method_getTypeEncoding(superMethod))
 		end
 	end
 end
@@ -173,6 +181,7 @@ local function _createBlockWrapper(lambda, retType, argTypes)
 	local funTypeStr = objc.impSignatureForTypeEncoding(retType, argTypes)
 
 	ret = function(theBlock, ...)
+		print("block call")
 		return lambda(...)
 	end
 	return ffi.cast(funTypeStr, ret)
@@ -184,6 +193,7 @@ function tlcutils.createBlock(lambda, retType, argTypes)
 	if not lambda then
 		return nil
 	end
+
 	local block = _blockType()
 	block.isa = C._NSConcreteGlobalBlock
 	block.flags = bit.lshift(1, 29)
@@ -191,7 +201,7 @@ function tlcutils.createBlock(lambda, retType, argTypes)
 	block.invoke = ffi.cast("void*", _createBlockWrapper(lambda, retType, argTypes))
 	block.descriptor = _sharedBlockDescriptor
 
-	return ffi.cast(_idType, block)
+	return ffi.cast("id", block)
 end
 
 return tlcutils
