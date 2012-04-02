@@ -71,6 +71,7 @@ Method class_getClassMethod(Class aClass, SEL aSelector);
 IMP class_getMethodImplementation(Class cls, SEL name);
 Method class_getInstanceMethod(Class aClass, SEL aSelector);
 Method class_getClassMethod(Class aClass, SEL aSelector);
+BOOL class_respondsToSelector(Class cls, SEL sel);
 
 Class object_getClass(id object);
 const char *object_getClassName(id obj);
@@ -348,9 +349,25 @@ end
 
 -- Used as a __newindex metamethod
 local function _setter(self, key, value)
-	-- Try calling setKey:value
-	local selector = "set"..key:sub(1,1):upper()..key:sub(2).."_"
-	return self[selector](self, value)
+	local selector = "set"..key:sub(1,1):upper()..key:sub(2)
+	if C.class_respondsToSelector(C.object_getClass(self), SEL(selector..":")) == 1 then
+		return self[selector](self, value)
+	else
+		return self:setValue_forKey_(Obj(value), NSStr(key))
+	end
+end
+
+local function _getter(self, key)
+	local idx = tonumber(key)
+	if idx ~= nil then
+		return self:objectAtIndex(idx)
+	else
+		if C.class_respondsToSelector(C.object_getClass(self), SEL(key)) == 1 then
+			return self[key](self)
+		else
+			return self:valueForKey_(NSStr(key))
+		end
+	end
 end
 
 
@@ -470,9 +487,7 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 end
 
 ffi.metatype("struct objc_object", {
-	__call = function(self)
-		error("[objc] Objects are not callable\n"..debug.traceback())
-	end,
+	__call = _getter, -- Called using aObject[[key]]
 	__tostring = objc.objToStr,
 	__index = objc.getInstanceMethodCaller,
 	__newindex = _setter
