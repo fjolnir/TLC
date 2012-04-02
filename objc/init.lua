@@ -275,7 +275,7 @@ end
 -- Convenience functions
 
 function objc.objToStr(aObj) -- Automatically called with tostring(object)
-	local str = ffi.cast(_idType, aObj):description():UTF8String()
+	local str = aObj:description():UTF8String()
 	return ffi.string(str)
 end
 
@@ -440,7 +440,6 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 			return nil
 		end
 
-		self = ffi.cast(_idType, self)
 		-- First try the cache
 		if objc.relaxedSyntax == true then
 			-- Append missing underscores to the selector
