@@ -360,16 +360,16 @@ ffi.metatype("struct objc_class", {
 		error("[objc] Classes are not callable\n"..debug.traceback())
 	end,
 	__tostring = objc.objToStr,
-	__index = function(unused,selArg)
+	__index = function(realSelf,selArg)
 		return function(self, ...)
-			if self == nil then
+			if self ~= realSelf then
 				error("[objc] Self not passed. You probably used dot instead of colon syntax\n"..debug.traceback())
 				return nil
 			end
 
 			if objc.relaxedSyntax == true then
 				-- Append missing underscores to the selector
-				selArg = selArg .. ("_"):rep(#{...} - _argCountForSelArg(selArg))
+				selArg = selArg .. ("_"):rep(select("#", ...) - _argCountForSelArg(selArg))
 			end
 
 			-- First try the cache
@@ -416,9 +416,9 @@ ffi.metatype("struct objc_class", {
 })
 
 -- Returns a function that takes an object reference and the arguments to pass to the method.
-function objc.getInstanceMethodCaller(self,selArg)
+function objc.getInstanceMethodCaller(realSelf,selArg)
 	return function(self, ...)
-		if self == nil then
+		if self ~= realSelf then
 			error("[objc] Self not passed. You probably used dot instead of colon syntax")
 			return nil
 		end
@@ -427,7 +427,7 @@ function objc.getInstanceMethodCaller(self,selArg)
 		-- First try the cache
 		if objc.relaxedSyntax == true then
 			-- Append missing underscores to the selector
-			selArg = selArg .. ("_"):rep(#{...} - _argCountForSelArg(selArg))
+			selArg = selArg .. ("_"):rep(select("#", ...) - _argCountForSelArg(selArg))
 		end
 
 		local cached = (_instanceMethodCache[_classNameCache[self] ] or _emptyTable)[selArg]
