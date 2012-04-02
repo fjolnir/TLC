@@ -12,7 +12,7 @@
 -- myDict["anotherKey"] = "foobar"
 
 local objc = require("objc")
-local cf = require("corefoundation")
+local cf = require("objc.CoreFoundation")
 local ffi = require("ffi")
 
 ffi.cdef([[

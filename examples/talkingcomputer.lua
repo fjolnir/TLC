@@ -1,4 +1,4 @@
-package.path = package.path .. ';../?.lua'
+package.path = package.path .. ';../?/init.lua'
 local objc = require("objc")
 objc.loadFramework("AppKit")
 pool = objc.NSAutoreleasePool:new()

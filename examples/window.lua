@@ -1,7 +1,7 @@
 -- Ported from LuaCocoa's MinimalAppKit example
 -- Creates a quit menu item and a window. Very minimal indeed.
 
-package.path = package.path .. ';../?.lua'
+package.path = package.path .. ';../?/init.lua'
 local objc = require("objc")
 objc.loadFramework("AppKit")
 setmetatable(_G, {__index=objc})
