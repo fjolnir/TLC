@@ -81,8 +81,8 @@ function tlcutils.addMethod(class, selector, lambda, retType, argTypes)
 	local couldAddMethod = C.class_addMethod(class, selector, imp, retType..table.concat(argTypes))
 	if couldAddMethod == 0 then
 		-- If the method already exists, we just add the new method as old{selector} and swizzle them
-		if C.class_addMethod(class, newSel, imp, retType..table.concat(argTypes)) == 1 then
-			tlcutils.swizzle(class, selector, newSel)
+		if C.class_addMethod(class, renamedSel, imp, retType..table.concat(argTypes)) == 1 then
+			tlcutils.swizzle(class, selector, renamedSel)
 		else
 			error("Couldn't replace method")
 		end
