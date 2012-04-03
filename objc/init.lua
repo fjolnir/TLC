@@ -162,6 +162,11 @@ local _classMethodCache = {}; objc.classMethodCache = _classMethodCache
 local _instanceMethodCache = {}; objc.instanceMethodCache = _instanceMethodCache
 
 local _classNameCache = setmetatable({}, { __mode = "k" })
+-- We cache imp types both for performance, and so we don't fill the ffi type table with duplicates
+local _impTypeCache = setmetatable({}, {__index=function(t,impSig)
+	t[impSig] = ffi.typeof(impSig)
+	return t[impSig]
+end})
 local _idType = ffi.typeof("struct objc_object*")
 
 
@@ -270,7 +275,7 @@ function objc.impForMethod(method)
 	_log("Reading method:", objc.selToStr(C.method_getName(method)), impTypeStr)
 
 	local imp = C.method_getImplementation(method);
-	return ffi.cast(impTypeStr, imp)
+	return ffi.cast(_impTypeCache[impTypeStr], imp)
 end
 
 -- Convenience functions
