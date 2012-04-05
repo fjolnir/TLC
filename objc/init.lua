@@ -19,7 +19,10 @@ local ffi = require("ffi")
 
 local objc = {
 	debug = false,
-	relaxedSyntax = true, -- Allows you to omit trailing underscores when calling methods at the expense of some performance.
+	 -- Allows you to omit trailing underscores when calling methods at the expense of some performance.
+	relaxedSyntax = true,
+	-- Calls objc_msgSend if a method implementation is not found (This throws an exception on failure)
+	fallbackOnMsgSend = true,
 	frameworkSearchPaths = {
 		"/System/Library/Frameworks/%s.framework/%s",
 		"/Library/Frameworks/%s.framework/%s",
@@ -64,6 +67,8 @@ typedef struct objc_method *Method;
 struct objc_method_description { SEL name; char *types; };
 
 id objc_msgSend(id theReceiver, SEL theSelector, ...);
+Class objc_allocateClassPair(Class superclass, const char *name, size_t extraBytes);
+void objc_registerClassPair(Class cls);
 
 Class objc_getClass(const char *name);
 const char *class_getName(Class cls);
@@ -72,6 +77,9 @@ IMP class_getMethodImplementation(Class cls, SEL name);
 Method class_getInstanceMethod(Class aClass, SEL aSelector);
 Method class_getClassMethod(Class aClass, SEL aSelector);
 BOOL class_respondsToSelector(Class cls, SEL sel);
+Class class_getSuperclass(Class cls);
+IMP class_replaceMethod(Class cls, SEL name, IMP imp, const char *types);
+BOOL class_addMethod(Class cls, SEL name, IMP imp, const char *types);
 
 Class object_getClass(id object);
 const char *object_getClassName(id obj);
@@ -81,6 +89,9 @@ unsigned method_getNumberOfArguments(Method method);
 void method_getReturnType(Method method, char *dst, size_t dst_len);
 void method_getArgumentType(Method method, unsigned int index, char *dst, size_t dst_len);
 IMP method_getImplementation(Method method);
+const char *method_getTypeEncoding(Method method);
+void method_exchangeImplementations(Method m1, Method m2);
+
 
 SEL sel_registerName(const char *str);
 const char* sel_getName(SEL aSelector);
@@ -358,8 +369,10 @@ local function _setter(self, key, value)
 	local selector = "set"..key:sub(1,1):upper()..key:sub(2)
 	if C.class_respondsToSelector(C.object_getClass(self), SEL(selector..":")) == 1 then
 		return self[selector](self, value)
-	else
+	elseif objc.fallbackOnMsgSend == true then
 		return self:setValue_forKey_(Obj(value), NSStr(key))
+    else
+        print("[objc] Key "..key.." not found")
 	end
 end
 
@@ -370,8 +383,10 @@ local function _getter(self, key)
 	else
 		if C.class_respondsToSelector(C.object_getClass(self), SEL(key)) == 1 then
 			return self[key](self)
-		else
+		elseif objc.fallbackOnMsgSend == true then
 			return self:valueForKey_(NSStr(key))
+        else
+            print("[objc] Key "..key.." not found")
 		end
 	end
 end
@@ -408,8 +423,11 @@ ffi.metatype("struct objc_class", {
 			local methodDesc = C.class_getClassMethod(self, SEL(selStr))
 			if methodDesc ~= nil then
 				method = objc.impForMethod(methodDesc)
+			elseif objc.fallbackOnMsgSend == true then
+			imp = C.objc_msgSend
 			else
-				method = C.objc_msgSend
+				print("[objc] Method "..selStr.." not found")
+				return nil
 			end
 
 			-- Cache the calling block and execute it
@@ -464,8 +482,11 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 		local methodDesc = C.class_getInstanceMethod(C.object_getClass(self), SEL(selStr))
 		if methodDesc ~= nil then
 			imp = objc.impForMethod(methodDesc)
-		else
+		elseif objc.fallbackOnMsgSend == true then
 			imp = C.objc_msgSend
+		else
+			print("[objc] Method "..selStr.." not found")
+			return nil
 		end
 
 		-- Cache the calling block and execute it
@@ -497,5 +518,123 @@ ffi.metatype("struct objc_object", {
 	__index = objc.getInstanceMethodCaller,
 	__newindex = _setter
 })
+
+
+
+--
+-- Introspection and class extension
+
+-- Creates and returns a new subclass of superclass (or if superclass is nil, a new root class)
+function objc.createClass(superclass, className)
+	local class = C.objc_allocateClassPair(superclass, className, 0)
+	C.objc_registerClassPair(class)
+	return class
+end
+
+-- Calls the superclass's implementation of a method
+function objc.callSuper(self, selector, ...)
+	local superClass = C.class_getSuperclass(C.object_getClass(self))
+	local method = C.class_getInstanceMethod(superClass, selector)
+	return objc.impForMethod(method)(self, selector, ...)
+end
+
+-- Swaps two methods of a class (They must have the same type signature)
+function objc.swizzle(class, origSel, newSel)
+	local origMethod = C.class_getInstanceMethod(class, origSel)
+	local newMethod = C.class_getInstanceMethod(class, newSel)
+	if C.class_addMethod(class, origSel, C.method_getImplementation(newMethod), C.method_getTypeEncoding(newMethod)) == true then
+		C.class_replaceMethod(class, newSel, C.method_getImplementation(origMethod), C.method_getTypeEncoding(origMethod));
+	else
+		C.method_exchangeImplementations(origMethod, newMethod)
+	end
+end
+
+-- Adds a function as a method to the given class
+-- If the method already exists, it is renamed to __{selector}
+-- The function must have self (id), and selector (SEL) as it's first two arguments
+-- Defaults are to return void and to take an object and a selector
+function objc.addMethod(class, selector, lambda, retType, argTypes)
+	retType = retType or "v"
+	argTypes = argTypes or {"@",":"}
+	local signature = objc.impSignatureForTypeEncoding(retType, argTypes)
+	local imp = ffi.cast(signature, lambda)
+	imp = ffi.cast("IMP", imp)
+
+	-- If one exists, the existing/super method will be renamed to this selector
+	local renamedSel = objc.SEL("__"..objc.selToStr(selector))
+	
+	local couldAddMethod = C.class_addMethod(class, selector, imp, retType..table.concat(argTypes))
+	if couldAddMethod == 0 then
+		-- If the method already exists, we just add the new method as old{selector} and swizzle them
+		if C.class_addMethod(class, renamedSel, imp, retType..table.concat(argTypes)) == 1 then
+			objc.swizzle(class, selector, renamedSel)
+		else
+			error("Couldn't replace method")
+		end
+	else
+		local superClass = C.class_getSuperclass(class)
+		local superMethod = C.class_getInstanceMethod(superClass, selector)
+		if superMethod ~= nil then
+			C.class_addMethod(class, renamedSel, C.method_getImplementation(superMethod), C.method_getTypeEncoding(superMethod))
+		end
+	end
+end
+
+
+--
+-- Blocks
+
+ffi.cdef[[
+// http://clang.llvm.org/docs/Block-ABI-Apple.txt
+struct __block_descriptor_1 {
+	unsigned long int reserved; // NULL
+	unsigned long int size; // sizeof(struct __block_literal_1)
+}
+
+struct __block_literal_1 {
+	struct __block_literal_1 *isa;
+	int flags;
+	int reserved;
+	void *invoke;
+	struct __block_descriptor_1 *descriptor;
+}
+struct __block_literal_1 *_NSConcreteGlobalBlock;
+]]
+
+local _sharedBlockDescriptor = ffi.new("struct __block_descriptor_1")
+_sharedBlockDescriptor.reserved = 0;
+_sharedBlockDescriptor.size = ffi.sizeof("struct __block_literal_1")
+
+-- Wraps a function to be used with a block
+local function _createBlockWrapper(lambda, retType, argTypes)
+	-- Build a function definition string to cast to
+	retType = retType or "v"
+	argTypes = argTypes or {}
+	table.insert(argTypes, 1, "^v")
+
+	local funTypeStr = objc.impSignatureForTypeEncoding(retType, argTypes)
+
+	ret = function(theBlock, ...)
+		return lambda(...)
+	end
+	return ffi.cast(funTypeStr, ret)
+end
+
+-- Creates a block and returns it typecast to 'id'
+local _blockType = ffi.typeof("struct __block_literal_1")
+function objc.createBlock(lambda, retType, argTypes)
+	if not lambda then
+		return nil
+	end
+
+	local block = _blockType()
+	block.isa = C._NSConcreteGlobalBlock
+	block.flags = bit.lshift(1, 29)
+	block.reserved = 0
+	block.invoke = ffi.cast("void*", _createBlockWrapper(lambda, retType, argTypes))
+	block.descriptor = _sharedBlockDescriptor
+
+	return ffi.cast("id", block)
+end
 
 return objc
