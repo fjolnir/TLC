@@ -489,12 +489,12 @@ ffi.metatype("struct objc_class", {
 			-- Else, load the method
 			local selStr = _selectorFromSelArg(selArg)
 
-			local method
+			local imp
 			local methodDesc = C.class_getClassMethod(self, SEL(selStr))
 			if methodDesc ~= nil then
-				method = objc.impForMethod(methodDesc)
+				imp = objc.impForMethod(methodDesc)
 			elseif objc.fallbackOnMsgSend == true then
-			imp = C.objc_msgSend
+				imp = C.objc_msgSend
 			else
 				print("[objc] Method "..selStr.." not found")
 				return nil
@@ -505,12 +505,13 @@ ffi.metatype("struct objc_class", {
 			local className = _classNameCache[self]
 			_classMethodCache[className] = _classMethodCache[className] or {}
 			_classMethodCache[className][selArg] = function(receiver, ...)
-				local success, ret = pcall(method, ffi.cast(_idType, receiver), SEL(selStr), ...)
+				local success, ret = pcall(imp, ffi.cast(_idType, receiver), SEL(selStr), ...)
 				if success == false then
 					error(ret.."\n"..debug.traceback())
 				end
 
 				if ffi.istype(_idType, ret) and ret ~= nil then
+					_classNameCache[ret] = className
 					if (selStr:sub(1,5) ~= "alloc" and selStr ~= "new")  then
 						ret:retain()
 					end
@@ -540,7 +541,7 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 			selArg = selArg .. ("_"):rep(select("#", ...) - _argCountForSelArg(selArg))
 		end
 
-		local cached = (_instanceMethodCache[_classNameCache[self] ] or _emptyTable)[selArg]
+		local cached = (_instanceMethodCache[_classNameCache[self]] or _emptyTable)[selArg]
 		if cached ~= nil then
 			return cached(self, ...)
 		end
@@ -570,6 +571,7 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 			end
 
 			if ffi.istype(_idType, ret) and ret ~= nil and not (selStr == "retain" or selStr == "release") then
+				_classNameCache[ret] = ffi.string(C.object_getClassName(ret))
 				-- Retain objects that need to be retained
 				if not (selStr:sub(1,4) == "init" or selStr:sub(1,4) == "copy" or selStr:sub(1,11) == "mutableCopy") then
 					ret:retain()
