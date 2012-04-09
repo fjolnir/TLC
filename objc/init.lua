@@ -263,7 +263,6 @@ local function _parseStructOrUnionEncoding(encoded, isUnion)
 		local success, err = pcall(ffi.cdef, typeStr)
 		if success == false then
 			_log("Error loading struct ", name, ": ", err)
-			return nil
 		end
 		return keyword.." "..name
 	else
