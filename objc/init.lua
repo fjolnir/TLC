@@ -344,19 +344,15 @@ function objc.impSignatureForTypeEncoding(signature, name)
 	return signature..")"
 end
 
--- Creates a C function signature string for the IMP of a method
-function objc.impSignatureForMethod(method)
-	return objc.impSignatureForTypeEncoding(ffi.string(C.method_getTypeEncoding(method)))
-end
-
 -- Returns the IMP of a method correctly typecast
 function objc.impForMethod(method)
-	local impTypeStr = objc.impSignatureForMethod(method)
-	if impTypeStr == nil then
+	local typeEncoding = ffi.string(C.method_getTypeEncoding(method))
+	local impSignature = objc.impSignatureForTypeEncoding(typeEncoding)
+	if impSignature == nil then
 		return nil
 	end
-	_log("Reading method:", objc.selToStr(C.method_getName(method)), impTypeStr)
-	return ffi.cast(_impTypeCache[impTypeStr], C.method_getImplementation(method))
+	if objc.debug then _log("Reading method:", objc.selToStr(C.method_getName(method)), typeEncoding, impTypeStr) end
+	return ffi.cast(_impTypeCache[impSignature], C.method_getImplementation(method))
 end
 
 -- Convenience functions
