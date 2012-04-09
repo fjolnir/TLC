@@ -166,23 +166,6 @@ end})
 local _idType = ffi.typeof("struct objc_object*")
 objc.idType = _idType
 
--- Stores custom metatables (registered with class_setMetaTable())
-local _augmentedMetaTables = {}
-
--- Takes as it's first argument either a class, or an array of classes(in the case of a class cluster) to set the metatable for
-function objc.class_setMetaTable(classes, metaTable)
-	if type(classes) ~= "table" then
-		classes = {class}
-	end
-	local className = ffi.string(C.class_getName(classes[1]))
-	ffi.cdef("typedef struct _"..className.."__tlc { Class isa; } *"..className)
-	metaTable.__objcType = ffi.typeof(className)
-	ffi.metatype("struct _"..className.."__tlc", metaTable)
-	for i, class in pairs(classes) do
-		_augmentedMetaTables[tostring(C.class_getName(class))] = metaTable
-	end
-end
-
 -- Parses an ObjC type encoding string into an array of type dictionaries
 function objc.parseTypeEncoding(str)
 	local last = 1
@@ -527,15 +510,7 @@ ffi.metatype("struct objc_class", {
 			local className = _classNameCache[self]
 			_classMethodCache[className] = _classMethodCache[className] or {}
 			_classMethodCache[className][selArg] = function(receiver, ...)
-				-- Check if there are any augmented objects in the argument list, and if so cast them back to id
-				local args = {...}
-				for i,arg in pairs(args) do
-					if type(arg) == "cdata" and tostring(ffi.typeof(arg)):sub(-8) == "__tlc *>" then
-						args[i] = ffi.cast(_idType, arg)
-					end
-				end	
-
-				local success, ret = pcall(method, ffi.cast(_idType, receiver), SEL(selStr), unpack(args))
+				local success, ret = pcall(method, ffi.cast(_idType, receiver), SEL(selStr), ...)
 				if success == false then
 					error(ret.."\n"..debug.traceback())
 				end
@@ -546,11 +521,6 @@ ffi.metatype("struct objc_class", {
 					end
 					if selStr:sub(1,5) ~= "alloc" then
 						ret = ffi.gc(ret, C.CFRelease)
-					end
-					local classNamePtr = C.object_getClassName(ret)
-					local customMt = _augmentedMetaTables[tostring(classNamePtr)]
-					if customMt ~= nil then
-						ret = ffi.cast(customMt.__objcType, ret)
 					end
 				end
 				return ret
@@ -568,7 +538,6 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 			error("[objc] Self not passed. You probably used dot instead of colon syntax")
 			return nil
 		end
-		self = ffi.cast(_idType, self)
 
 		-- First try the cache
 		if objc.relaxedSyntax == true then
@@ -600,14 +569,7 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 		local className = _classNameCache[self]
 		_instanceMethodCache[className] = _instanceMethodCache[className] or {}
 		_instanceMethodCache[className][selArg] = function(receiver, ...)
-			-- Check if there are any augmented objects in the argument list, and if so cast them back to id
-			local args = {...}
-			for i,arg in pairs(args) do
-				if type(arg) == "cdata" and tostring(ffi.typeof(arg)):sub(-8) == "__tlc *>" then
-					args[i] = ffi.cast(_idType, arg)
-				end
-			end
-			local success, ret = pcall(imp, receiver, SEL(selStr), unpack(args))
+			local success, ret = pcall(imp, receiver, SEL(selStr), ...)
 			if success == false then
 				error(ret.."\n"..debug.traceback())
 			end
@@ -618,11 +580,6 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 					ret:retain()
 				end
 				ret = ffi.gc(ret, C.CFRelease)
-
-				local customMt = _augmentedMetaTables[tostring(C.object_getClassName(ret))]
-				if customMt ~= nil then
-					ret = ffi.cast(customMt.__objcType, ret)
-				end
 			end
 			return ret
 		end
