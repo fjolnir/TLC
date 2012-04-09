@@ -3,15 +3,14 @@
 
 package.path = package.path .. ';../?/init.lua'
 local objc = require("objc")
-objc.loadFramework("AppKit")
+local bs = require("objc.BridgeSupport")
+bs.loadFramework("Foundation")
+bs.loadFramework("AppKit")
+bs.loadFramework("ApplicationServices")
 setmetatable(_G, {__index=objc})
 
-local NSApplicationActivationPolicyRegular = 0
-local NSTitledWindowMask = 1
-local NSBackingStoreBuffered = 2
-
 local NSApp = NSApplication:sharedApplication()
-NSApp:setActivationPolicy(NSApplicationActivationPolicyRegular)
+NSApp:setActivationPolicy(bs.NSApplicationActivationPolicyRegular)
 
 -- Create the menubar
 local menuBar = NSMenu:alloc():init()
@@ -28,8 +27,8 @@ appMenu:addItem(quitMenuItem)
 appMenuItem:setSubmenu(appMenu)
 
 -- Create a window
-local mainWindow = NSWindow:alloc():initWithContentRect_styleMask_backing_defer(CGRect(CGPoint(0, 0), CGSize(200, 200)), NSTitledWindowMask, NSBackingStoreBuffered, false)
-mainWindow:cascadeTopLeftFromPoint(CGPoint(20,20))
+local mainWindow = NSWindow:alloc():initWithContentRect_styleMask_backing_defer(bs.CGRect(bs.CGPoint(0, 0), bs.CGSize(200, 200)), bs.NSTitledWindowMask, bs.NSBackingStoreBuffered, false)
+mainWindow:cascadeTopLeftFromPoint(bs.CGPoint(20,20))
 mainWindow:setTitle(appName)
 mainWindow:makeKeyAndOrderFront(NSApp)
 
