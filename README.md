@@ -18,13 +18,16 @@ TLC supports the following:
 
  * Loading frameworks
  * Accessing Objective-C objects
+ * Creating Objective-C classes
  * Calling methods on said objects
  * Creating blocks from Lua functions
  * Converting the basic lua types to objects (Explicitly)
+ * Loading BridgeSupport files
 
 TLC Does not *yet* support the following:
 
  * Calling methods that take a variable number of arguments
+ * Defining variadic blocks, methods or callbacks, or ones that take pass-by-value(non-pointer) structs or unions. (A limitation of LuaJIT FFI)
 
 ### Loading TLC
 ```lua
@@ -32,7 +35,14 @@ local objc = require("objc")
 ```
 ### Loading frameworks
 ```lua
-objc.loadFramework("AppKit")
+objc.loadFramework("Foundation")
+
+-- You can also use BridgeSupport
+-- It is slower, but you get access to all C types, functions & constants automatically
+local bs = require("objc.BridgeSupport")
+bs.loadFramework("Foundation")
+-- You can then access constants using bs
+myView.center = CGPointZero
 ```
 
 ### Accessing Objective-C objects
@@ -46,9 +56,9 @@ local myStr = NSString:stringWithUTF8String("I am an NSString.")
 
 -- Calling selectors with multiple arguments requires replacing the colons with underscores
 -- Except the ones at the end, they are optional.
--- Example selector:with:multiple:arguments: => selector_with_multiple_arguments()
---         selectorWithAnonymousArgs:::: => selectorWithAnonymousArgs()
-local anObject = MyObject:selector_with_multiple_arguments(arg1, arg2, arg3, arg4)
+-- Example selector:with:multiple:parameters: => selector_with_multiple_parameters()
+--         selectorWithAnonymousParams:::: => selectorWithAnonymousParams()
+local anObject = MyObject:selector_with_multiple_parameters(arg1, arg2, arg3, arg4)
 ```
 ## Creating Blocks from Lua Functions
 ```lua
@@ -58,7 +68,7 @@ local anObject = MyObject:selector_with_multiple_arguments(arg1, arg2, arg3, arg
 local block = objc.createBlock(function(object, double)
 	print("I was passed these arguments: ", object, double)
 	return 123
-end, "i", {"@", "d"})
+end, "i@d")
 ```
 
 ### Converting the Basic Lua Types to Objects
