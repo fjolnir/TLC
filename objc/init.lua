@@ -22,7 +22,7 @@ local objc = {
 	 -- Allows you to omit trailing underscores when calling methods at the expense of some performance.
 	relaxedSyntax = true,
 	-- Calls objc_msgSend if a method implementation is not found (This throws an exception on failure)
-	fallbackOnMsgSend = true,
+	fallbackOnMsgSend = false,
 	frameworkSearchPaths = {
 		"/System/Library/Frameworks/%s.framework/%s",
 		"/Library/Frameworks/%s.framework/%s",
@@ -101,25 +101,6 @@ void CFRelease(id obj);
 
 // Used to check if a file exists
 int access(const char *path, int amode);
-
-// NSObject dependencies
-typedef struct CGPoint { CGFloat x; CGFloat y; } CGPoint;
-typedef struct CGSize { CGFloat width; CGFloat height; } CGSize;
-typedef struct CGRect { CGPoint origin; CGSize size; } CGRect;
-typedef struct CGAffineTransform { CGFloat a; CGFloat b; CGFloat c; CGFloat d; CGFloat tx; CGFloat ty; } CGAffineTransform;
-typedef struct _NSRange { NSUInteger location; NSUInteger length; } NSRange;
-typedef struct _NSZone NSZone;
-
-// Opaque dependencies
-struct _NSStringBuffer;
-struct __CFCharacterSet;
-struct __GSFont;
-struct __CFString;
-struct __CFDictionary;
-struct __CFArray;
-struct __CFAllocator;
-struct _NSModalSession;
-struct Object;
 ]]
 
 local C = ffi.C
@@ -140,12 +121,6 @@ if ffi.arch ~= "arm" then
 	objc.loadFramework("CoreFoundation")
 	objc.loadFramework("Foundation")
 end
-
-objc.CGPoint = ffi.typeof("CGPoint")
-objc.CGSize = ffi.typeof("CGSize")
-objc.CGRect = ffi.typeof("CGRect")
-objc.CGAffineTransform = ffi.typeof("CGAffineTransform")
-objc.NSRange = ffi.typeof("NSRange")
 
 setmetatable(objc, {
 	__index = function(t, key)
@@ -181,6 +156,96 @@ end})
 local _idType = ffi.typeof("struct objc_object*")
 
 
+-- Parses an ObjC type encoding string
+local function _parseEncoding(str)
+    local last = 1
+    local ret = {}
+    local i = 1
+    local braceDepth = 0
+    local parenDepth = 0
+	local inQuotes = false
+	local curName, curType
+    while i <= #str do
+		if     str:sub(i,i) == "{" then braceDepth = braceDepth + 1
+		elseif str:sub(i,i) == "}" then braceDepth = braceDepth - 1
+		elseif str:sub(i,i) == "(" then braceDepth = parenDepth + 1
+		elseif str:sub(i,i) == ")" then parenDepth = parenDepth - 1
+		elseif str:sub(i,i) == '"' then inQuotes = not inQuotes; i = i+1 end
+
+		if braceDepth > 0 or parenDepth > 0 then
+			curType = curType .. str:sub(i,i)
+		elseif inQuotes == true then
+			curName = curName .. str:sub(i,i)
+		end
+        if str:sub(i, i) == '"' and parenDepth == 0 and braceDepth == 0 then
+            local str = str:sub(last, i-1)
+            if #str > 0 then
+                table.insert(ret, str)
+            end
+            last = i+1
+        end
+        i = i + 1
+    end
+    -- Concat the rest of the string
+    if last < #str+1 then
+        table.insert(ret, str:sub(last))
+    end
+    return ret
+end
+
+-- Parses a struct encoding like {CGPoint="x"d"y"d}
+local _definedStructs = setmetatable({}, { __mode = "kv" })
+local function _parseStructOrUnionEncoding(encoded, isUnion)
+	local pat = "{([^=}]+)[=}]"
+	local keyword = "struct"
+	if isUnion == true then
+		pat = '%(([^=%)]+)[=%)]'
+		keyword = "union"
+	end
+
+	local unused, nameEnd, name = encoded:find(pat)
+	local typeEnc = encoded:sub(nameEnd+1, #encoded-1)
+	local fields = _split(typeEnc, '"')
+	print("-------", name, #fields, typeEnc)
+	
+	if name == "?" and #fields <= 1 then
+		print("ANON WITH A BEEF!")
+		print(name, nameEnd, typeEnc)
+		for k,v in pairs(fields) do print(k,v) end
+	end
+	if #fields <= 1 then return keyword.." "..name end
+	
+	local typeStr = _definedStructs[name]
+	-- If the struct has been defined already, or does not have field name information, just return the name
+	if typeStr ~= nil then
+		return keyword.." "..name
+	end
+
+	if name == "?" then name = "" end -- ? means an anonymous struct/union
+	local typeStr = keyword.." "..name.." { "
+	
+	for i=1,#fields,2 do
+		if fields[i] ~= nil and fields[i+1] ~= nil then
+			local type = objc.typeEncodingToCType(fields[i+1])
+			if type == nil then
+				if objc.debug == true then _log("Unsupported type in "..keyword.." "..name..": "..fields[i+1]) end
+				return nil
+			end
+			typeStr = typeStr .. type .." ".. fields[i] ..";"
+		end
+	end
+	typeStr = typeStr .." }"
+	print(typeStr)
+	if #name > 0 then
+		_definedStructs[name] = typeStr
+		ffi.cdef(typeStr)
+		return keyword.." "..name -- If the struct has a name, then we don't want to redefine it
+	else
+		print("Anon-> ", typeStr)
+		return typeStr
+	end
+end
+
 -- Takes a single ObjC type encoded, and converts it to a C type specifier
 local _typeEncodings = {
 	["@"] = "id", ["#"] = "Class", ["c"] = "char", ["C"] = "unsigned char",
@@ -212,19 +277,27 @@ objc.typeEncodingToCType = function(aEncoding)
 		_log("Error! type encoding '"..aEncoding.."' is not supported")
 		return nil
 	elseif type == "union" then
-		local name = aEncoding:sub(aEncoding:find("[^=^(]+"))
-		if name == "?" then
-			_log("Error! Anonymous unions not supported: "..aEncoding)
+		local unionType = _parseStructOrUnionEncoding(aEncoding:sub(i), true)
+		if unionType == nil then
+			_log("Error! type encoding '"..aEncoding.."' is not supported")
 			return nil
 		end
-		ret = string.format("%s %s %s", ret, type, name)
+		ret = ret .. unionType
+
+
+		--local name = aEncoding:sub(aEncoding:find("[^=^(]+"))
+		--if name == "?" then
+			--_log("Error! Anonymous unions not supported: "..aEncoding)
+			--return nil
+		--end
+		--ret = string.format("%s %s %s", ret, type, name)
 	elseif type == "struct" then
-		local name = aEncoding:sub(aEncoding:find('[^=^{]+'))
-		if name == "?" then
-			_log("Error! Anonymous structs not supported "..aEncoding)
+		local structType = _parseStructOrUnionEncoding(aEncoding:sub(i), false)
+		if structType == nil then
+			_log("Error! type encoding '"..aEncoding.."' is not supported")
 			return nil
 		end
-		ret = string.format("%s %s %s", ret, type, name)
+		ret = ret .. structType
 	else
 		ret = string.format("%s %s", ret, type)
 	end
@@ -236,7 +309,8 @@ objc.typeEncodingToCType = function(aEncoding)
 end
 
 -- Creates a C function signature string for the given types
-function objc.impSignatureForTypeEncoding(retType, argTypes)
+function objc.impSignatureForTypeEncoding(retType, argTypes, name)
+	name = name or "*" -- Default to an anonymous function pointer
 	retType = retType or "v"
 	argTypes = argTypes or {}
 	
@@ -244,7 +318,7 @@ function objc.impSignatureForTypeEncoding(retType, argTypes)
 	if retType == nil then
 		return nil
 	end
-	local signature = retType.." (*)("
+	local signature = retType.." ("..name..")("
 
 	for i,type in pairs(argTypes) do
 		type = objc.typeEncodingToCType(type)
@@ -292,6 +366,9 @@ end
 -- Convenience functions
 
 function objc.objToStr(aObj) -- Automatically called with tostring(object)
+	if aObj == nil then
+		return "nil"
+	end
 	local str = aObj:description():UTF8String()
 	return ffi.string(str)
 end
