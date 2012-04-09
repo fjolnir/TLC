@@ -1,0 +1,155 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <title>TLC by aptiva</title>
+    
+    <link rel="stylesheet" href="stylesheets/styles.css">
+    <link rel="stylesheet" href="stylesheets/pygment_trac.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+    <!--[if lt IE 9]>
+    <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <div class="wrapper">
+      <header>
+        <h1>TLC</h1>
+        <p>The Tiny Lua Cocoa Bridge</p>
+        <p class="view"><a href="https://github.com/aptiva/TLC">View the Project on GitHub <small>aptiva/TLC</small></a></p>
+        <ul>
+          <li><a href="https://github.com/aptiva/TLC/zipball/master">Download <strong>ZIP File</strong></a></li>
+          <li><a href="https://github.com/aptiva/TLC/tarball/master">Download <strong>TAR Ball</strong></a></li>
+          <li><a href="https://github.com/aptiva/TLC">Fork On <strong>GitHub</strong></a></li>
+        </ul>
+      </header>
+      <section>
+        <h1>TLC - The Tiny Lua Cocoa Bridge</h1>
+
+<p>TLC is a very compact and minimal Objective-C bridge for LuaJIT.
+Written by Fjõlnir Ásgeirsson </p>
+
+<h2>Simple Example</h2>
+
+<div class="highlight">
+<pre><span class="kd">local</span> <span class="n">objc</span> <span class="o">=</span> <span class="nb">require</span><span class="p">(</span><span class="s2">"</span><span class="s">objc"</span><span class="p">)</span>
+<span class="n">objc</span><span class="p">.</span><span class="n">loadFramework</span><span class="p">(</span><span class="s2">"</span><span class="s">AppKit"</span><span class="p">)</span>
+<span class="n">pool</span> <span class="o">=</span> <span class="n">objc</span><span class="p">.</span><span class="n">NSAutoreleasePool</span><span class="p">:</span><span class="n">new</span><span class="p">()</span>
+<span class="n">objc</span><span class="p">.</span><span class="n">NSSpeechSynthesizer</span><span class="p">:</span><span class="n">new</span><span class="p">():</span><span class="n">startSpeakingString</span><span class="p">(</span><span class="n">objc</span><span class="p">.</span><span class="n">NSStr</span><span class="p">(</span><span class="s2">"</span><span class="s">Hello From Lua!"</span><span class="p">))</span>
+<span class="nb">os.execute</span><span class="p">(</span><span class="s2">"</span><span class="s">sleep "</span><span class="o">..</span><span class="mi">2</span><span class="p">)</span>
+</pre>
+</div>
+
+
+<h2>Mini-Documentation</h2>
+
+<p>TLC supports the following:</p>
+
+<ul>
+<li>Loading frameworks</li>
+<li>Accessing Objective-C objects</li>
+<li>Creating Objective-C classes</li>
+<li>Calling methods on said objects</li>
+<li>Creating blocks from Lua functions</li>
+<li>Converting the basic lua types to objects (Explicitly)</li>
+<li>Loading BridgeSupport files</li>
+</ul><p>TLC Does not <em>yet</em> support the following:</p>
+
+<ul>
+<li>Calling methods that take a variable number of arguments</li>
+<li>Defining variadic blocks, methods or callbacks, or ones that take pass-by-value(non-pointer) structs or unions. (A limitation of LuaJIT FFI)</li>
+</ul><h3>Loading TLC</h3>
+
+<div class="highlight">
+<pre><span class="kd">local</span> <span class="n">objc</span> <span class="o">=</span> <span class="nb">require</span><span class="p">(</span><span class="s2">"</span><span class="s">objc"</span><span class="p">)</span>
+</pre>
+</div>
+
+
+<h3>Loading frameworks</h3>
+
+<div class="highlight">
+<pre><span class="n">objc</span><span class="p">.</span><span class="n">loadFramework</span><span class="p">(</span><span class="s2">"</span><span class="s">Foundation"</span><span class="p">)</span>
+
+<span class="c1">-- You can also use BridgeSupport</span>
+<span class="c1">-- It is slower, but you get access to all C types, functions &amp; constants automatically</span>
+<span class="kd">local</span> <span class="n">bs</span> <span class="o">=</span> <span class="nb">require</span><span class="p">(</span><span class="s2">"</span><span class="s">objc.BridgeSupport"</span><span class="p">)</span>
+<span class="n">bs</span><span class="p">.</span><span class="n">loadFramework</span><span class="p">(</span><span class="s2">"</span><span class="s">Foundation"</span><span class="p">)</span>
+<span class="c1">-- You can then access constants using bs</span>
+<span class="n">myView</span><span class="p">.</span><span class="n">center</span> <span class="o">=</span> <span class="n">bs</span><span class="p">.</span><span class="n">CGPointZero</span>
+</pre>
+</div>
+
+
+<h3>Accessing Objective-C objects</h3>
+
+<div class="highlight">
+<pre><span class="kd">local</span> <span class="n">NSString</span> <span class="o">=</span> <span class="n">objc</span><span class="p">.</span><span class="n">NSString</span>
+</pre>
+</div>
+
+
+<h3>Calling Methods</h3>
+
+<div class="highlight">
+<pre><span class="kd">local</span> <span class="n">myStr</span> <span class="o">=</span> <span class="n">NSString</span><span class="p">:</span><span class="n">stringWithUTF8String</span><span class="p">(</span><span class="s2">"</span><span class="s">I am an NSString."</span><span class="p">)</span>
+
+<span class="c1">-- Calling selectors with multiple arguments requires replacing the colons with underscores</span>
+<span class="c1">-- Except the ones at the end, they are optional.</span>
+<span class="c1">-- Example selector:with:multiple:parameters: =&gt; selector_with_multiple_parameters()</span>
+<span class="c1">--         selectorWithAnonymousParams:::: =&gt; selectorWithAnonymousParams()</span>
+<span class="kd">local</span> <span class="n">anObject</span> <span class="o">=</span> <span class="n">MyObject</span><span class="p">:</span><span class="n">selector_with_multiple_parameters</span><span class="p">(</span><span class="n">arg1</span><span class="p">,</span> <span class="n">arg2</span><span class="p">,</span> <span class="n">arg3</span><span class="p">,</span> <span class="n">arg4</span><span class="p">)</span>
+</pre>
+</div>
+
+
+<h3>Creating Blocks from Lua Functions</h3>
+
+<div class="highlight">
+<pre><span class="c1">-- To create a block you call createBlock with it's type encoding (Default being void return and no argument)</span>
+<span class="c1">-- To learn about type encodings read <a href="https://developer.apple.com/library/mac/#documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html">https://developer.apple.com/library/mac/#documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html</a></span>
+<span class="c1">-- A block returning an integer and taking one object and one double as arguments</span>
+<span class="kd">local</span> <span class="n">block</span> <span class="o">=</span> <span class="n">objc</span><span class="p">.</span><span class="n">createBlock</span><span class="p">(</span><span class="k">function</span><span class="p">(</span><span class="n">object</span><span class="p">,</span> <span class="n">double</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">"</span><span class="s">I was passed these arguments: "</span><span class="p">,</span> <span class="n">object</span><span class="p">,</span> <span class="n">double</span><span class="p">)</span>
+    <span class="k">return</span> <span class="mi">123</span>
+<span class="k">end</span><span class="p">,</span> <span class="s2">"</span><span class="s">i@d"</span><span class="p">)</span>
+</pre>
+</div>
+
+
+<h3>Converting the Basic Lua Types to Objects</h3>
+
+<div class="highlight">
+<pre><span class="c1">-- If you know the type of the variable you want to convert you should use these functions</span>
+<span class="kd">local</span> <span class="n">string</span>     <span class="o">=</span> <span class="n">NSStr</span><span class="p">(</span><span class="s2">"</span><span class="s">foobar"</span><span class="p">)</span>
+<span class="kd">local</span> <span class="n">number</span>     <span class="o">=</span> <span class="n">NSNum</span><span class="p">(</span><span class="mi">123</span><span class="p">)</span>
+<span class="kd">local</span> <span class="n">array</span>      <span class="o">=</span> <span class="n">NSArr</span><span class="p">({</span><span class="s2">"</span><span class="s">a"</span><span class="p">,</span><span class="s2">"</span><span class="s">b"</span><span class="p">,</span><span class="s2">"</span><span class="s">c"</span><span class="p">})</span>
+<span class="kd">local</span> <span class="n">dictionary</span> <span class="o">=</span> <span class="n">NSDic</span><span class="p">({</span> <span class="n">a</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">b</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="mi">3</span> <span class="p">})</span>
+<span class="c1">-- If not,</span>
+<span class="c1">-- The Obj() function takes an arbitrary value and determines the correct class to convert it to</span>
+<span class="kd">local</span> <span class="n">object</span> <span class="o">=</span> <span class="n">Obj</span><span class="p">(</span><span class="n">anyVariable</span><span class="p">)</span>
+</pre>
+</div>
+
+
+<h3>(Dirty Secret Trick)</h3>
+
+<div class="highlight">
+<pre><span class="c1">-- If you don't want to type 'objc.' before using a class you can set the global namespace to use it as a fallback</span>
+<span class="nb">setmetatable</span><span class="p">(</span><span class="nb">_G</span><span class="p">,</span> <span class="p">{</span><span class="n">__index</span><span class="o">=</span><span class="n">objc</span><span class="p">})</span>
+<span class="c1">-- And then you can simply write the class names without the 'objc.' prefix</span>
+<span class="n">obj</span> <span class="o">=</span> <span class="n">CoolClass</span><span class="p">:</span><span class="n">doThings</span><span class="p">()</span>
+</pre>
+</div>
+
+      </section>
+      <footer>
+        <p>This project is maintained by <a href="https://github.com/aptiva">aptiva</a></p>
+        <p><small>Hosted on GitHub Pages &mdash; Theme by <a href="https://github.com/orderedlist">orderedlist</a></small></p>
+      </footer>
+    </div>
+    <script src="javascripts/scale.fix.js"></script>
+    
+  </body>
+</html>
