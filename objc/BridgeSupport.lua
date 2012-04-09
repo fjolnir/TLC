@@ -131,7 +131,7 @@ function bs.load(path)
 
 	local parser = lxp.new(_parseCallbacks)
 	for l in io.lines(path) do
-		parser:parse(l.."\n")
+		parser:parse(l)
 	end
 	parser:parse()
 	parser:close()
