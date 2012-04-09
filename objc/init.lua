@@ -18,9 +18,9 @@
 local ffi = require("ffi")
 
 local objc = {
-	debug = false, -- Allows you to omit trailing underscores when calling methods at the expense of some performance.
-	relaxedSyntax = true, -- Calls objc_msgSend if a method implementation is not found (This throws an exception on failure)
-	fallbackOnMsgSend = false,
+	debug = false,
+	relaxedSyntax = true, -- Allows you to omit trailing underscores when calling methods at the expense of some performance.
+	fallbackOnMsgSend = false, -- Calls objc_msgSend if a method implementation is not found (This throws an exception on failure)
 	frameworkSearchPaths = {
 		"/System/Library/Frameworks/%s.framework/%s",
 		"/Library/Frameworks/%s.framework/%s",
