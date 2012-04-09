@@ -18,10 +18,8 @@
 local ffi = require("ffi")
 
 local objc = {
-	debug = false,
-	 -- Allows you to omit trailing underscores when calling methods at the expense of some performance.
-	relaxedSyntax = true,
-	-- Calls objc_msgSend if a method implementation is not found (This throws an exception on failure)
+	debug = false, -- Allows you to omit trailing underscores when calling methods at the expense of some performance.
+	relaxedSyntax = true, -- Calls objc_msgSend if a method implementation is not found (This throws an exception on failure)
 	fallbackOnMsgSend = false,
 	frameworkSearchPaths = {
 		"/System/Library/Frameworks/%s.framework/%s",
@@ -36,7 +34,7 @@ local function _log(...)
 		for i=1, #args do
 			args[i] = tostring(args[i])
 		end
-		io.stderr:write("[objc] "..table.concat(args, ",   ").."\n")
+		io.stderr:write("[objc] "..table.concat(args, " ").."\n")
 	end
 end
 
@@ -105,8 +103,20 @@ int access(const char *path, int amode);
 
 local C = ffi.C
 
-function objc.loadFramework(name)
+function objc.loadFramework(name, absolute)
 	local canRead = bit.lshift(1,2)
+	-- Check if it's an absolute path
+	if absolute then
+		local path = name
+		local a,b, name = path:find("([^./]+).framework$")
+		path = path..name
+		if C.access(path, canRead) == 0 then
+			bs.load(path)
+		end
+		return
+	end
+
+	-- Otherwise search
 	for i,path in pairs(objc.frameworkSearchPaths) do
 		path = path:format(name,name)
 		if C.access(path, canRead) == 0 then
@@ -156,44 +166,58 @@ end})
 local _idType = ffi.typeof("struct objc_object*")
 
 
--- Parses an ObjC type encoding string
-local function _parseEncoding(str)
-    local last = 1
-    local ret = {}
-    local i = 1
-    local braceDepth = 0
-    local parenDepth = 0
+-- Parses an ObjC type encoding string into an array of type dictionaries
+function objc.parseTypeEncoding(str)
+	local last = 1
+	local ret = {}
+	local i = 1
+	local fieldIdx = 1
+	local fields = { { name = "", type = "", indirection = 0, isConst = false} }
+	local depth = 0
 	local inQuotes = false
-	local curName, curType
-    while i <= #str do
-		if     str:sub(i,i) == "{" then braceDepth = braceDepth + 1
-		elseif str:sub(i,i) == "}" then braceDepth = braceDepth - 1
-		elseif str:sub(i,i) == "(" then braceDepth = parenDepth + 1
-		elseif str:sub(i,i) == ")" then parenDepth = parenDepth - 1
-		elseif str:sub(i,i) == '"' then inQuotes = not inQuotes; i = i+1 end
-
-		if braceDepth > 0 or parenDepth > 0 then
-			curType = curType .. str:sub(i,i)
-		elseif inQuotes == true then
-			curName = curName .. str:sub(i,i)
+	local curField = fields[1]
+	
+	local temp
+	while i <= #str do
+		c = str:sub(i,i)
+		if	 c:find("^[{%(%[]") then depth = depth + 1
+		elseif c:find("^[}%)%]]") then depth = depth - 1
+		elseif c == '"' then inQuotes = not inQuotes;
 		end
-        if str:sub(i, i) == '"' and parenDepth == 0 and braceDepth == 0 then
-            local str = str:sub(last, i-1)
-            if #str > 0 then
-                table.insert(ret, str)
-            end
-            last = i+1
-        end
-        i = i + 1
-    end
-    -- Concat the rest of the string
-    if last < #str+1 then
-        table.insert(ret, str:sub(last))
-    end
-    return ret
+		
+		if depth > 0 then
+			curField.type = curField.type .. c
+		elseif inQuotes == true and c ~= '"' then
+			curField.name = curField.name .. c
+		elseif c == "^" then curField.indirection = curField.indirection + 1
+		elseif c == "r" then curField.isConst = true
+		elseif c:find('^["noNRVr%^%d]') == nil then -- Skip over type qualifiers and bitfields
+			curField.type = curField.type .. c
+			fieldIdx = fieldIdx + 1
+			fields[fieldIdx] = { name = "", type = "", indirection = 0 } 
+			curField = fields[fieldIdx]
+		end
+		i = i + 1
+	end
+	-- If the last field was blank, remove it
+	if #fields[fieldIdx].name == 0 then
+		table.remove(fields, fieldIdx)
+	end
+	return fields
 end
 
--- Parses a struct encoding like {CGPoint="x"d"y"d}
+-- Parses an array encoding like [5i]
+local function _parseArrayEncoding(encoded)
+	local unused, countEnd, count = encoded:find("%[([%d]+)")
+	local unused, unused2, typeEnc = encoded:find("([^%d]+)%]")
+	local type = objc.typeToCType(objc.parseTypeEncoding(typeEnc)[1])
+	if type == nil then
+		return nil
+	end
+	return type, count
+end
+
+-- Parses a struct/union encoding like {CGPoint="x"d"y"d}
 local _definedStructs = setmetatable({}, { __mode = "kv" })
 local function _parseStructOrUnionEncoding(encoded, isUnion)
 	local pat = "{([^=}]+)[=}]"
@@ -205,127 +229,114 @@ local function _parseStructOrUnionEncoding(encoded, isUnion)
 
 	local unused, nameEnd, name = encoded:find(pat)
 	local typeEnc = encoded:sub(nameEnd+1, #encoded-1)
-	local fields = _split(typeEnc, '"')
-	print("-------", name, #fields, typeEnc)
-	
-	if name == "?" and #fields <= 1 then
-		print("ANON WITH A BEEF!")
-		print(name, nameEnd, typeEnc)
-		for k,v in pairs(fields) do print(k,v) end
-	end
-	if #fields <= 1 then return keyword.." "..name end
-	
+	local fields = objc.parseTypeEncoding(typeEnc, '"')
+
+	if name == "?" then name = "" end -- ? means an anonymous struct/union
+
+	if     #fields <= 1 and name == "" then return keyword.."{} "..name
+	elseif #fields <= 1 then return keyword.." "..name end
+
 	local typeStr = _definedStructs[name]
 	-- If the struct has been defined already, or does not have field name information, just return the name
 	if typeStr ~= nil then
 		return keyword.." "..name
 	end
 
-	if name == "?" then name = "" end -- ? means an anonymous struct/union
-	local typeStr = keyword.." "..name.." { "
-	
-	for i=1,#fields,2 do
-		if fields[i] ~= nil and fields[i+1] ~= nil then
-			local type = objc.typeEncodingToCType(fields[i+1])
-			if type == nil then
-				if objc.debug == true then _log("Unsupported type in "..keyword.." "..name..": "..fields[i+1]) end
-				return nil
-			end
-			typeStr = typeStr .. type .." ".. fields[i] ..";"
+	typeStr = keyword.." "..name.." { "
+	for i,f in pairs(fields) do
+		local name = f.name
+		if #name == 0 then name = "field"..tostring(i) end
+
+		local type = objc.typeToCType(f, name)
+		if type == nil then
+			if objc.debug == true then _log("Unsupported type in ", keyword, name, ": ", f.type) end
+			return nil
 		end
+		typeStr = typeStr .. type ..";"
 	end
 	typeStr = typeStr .." }"
-	print(typeStr)
+
+	-- If the struct has a name we create a ctype and then just return the name for it. If it has none, we return the definition
 	if #name > 0 then
 		_definedStructs[name] = typeStr
-		ffi.cdef(typeStr)
-		return keyword.." "..name -- If the struct has a name, then we don't want to redefine it
+		-- We need to wrap the def in a pcall so that we don't crash in case the struct is too big (As is the case with one in IOKit)
+		local success, err = pcall(ffi.cdef, typeStr)
+		if success == false then
+			_log("Error loading struct ", name, ": ", err)
+			return nil
+		end
+		return keyword.." "..name
 	else
-		print("Anon-> ", typeStr)
 		return typeStr
 	end
 end
 
--- Takes a single ObjC type encoded, and converts it to a C type specifier
+-- Takes a type table (contains type info for a single type, obtained using parseTypeEncoding), and converts it to a  c signature
 local _typeEncodings = {
 	["@"] = "id", ["#"] = "Class", ["c"] = "char", ["C"] = "unsigned char",
 	["s"] = "short", ["S"] = "unsigned short", ["i"] = "int", ["I"] = "unsigned int",
 	["l"] = "long", ["L"] = "unsigned long", ["q"] = "long long", ["Q"] = "unsigned long long",
-	["f"] = "float", ["d"] = "double", ["B"] = "BOOL", ["v"] = "void", ["^"] = "void *",
-	["*"] = "char *", [":"] = "SEL", ["?"] = "void", ["{"] = "struct", ["("] = "union"
+	["f"] = "float", ["d"] = "double", ["B"] = "BOOL", ["v"] = "void", ["^"] = "void *", ["?"] = "void *",
+	["*"] = "char *", [":"] = "SEL", ["?"] = "void", ["{"] = "struct", ["("] = "union", ["["] = "array"
 }
-objc.typeEncodingToCType = function(aEncoding)
+function objc.typeToCType(type, varName)
+	varName = varName or ""
 	local i = 1
 	local ret = ""
-	local isPtr = false
+	local encoding = type.type
+	local ptrStr = ("*"):rep(type.indirection)
 
-	if aEncoding:sub(i,i) == "^" then
-		isPtr = true
-		i = i+1
-	end
-	if aEncoding:sub(i,i) == "r" then
-		ret = "const "
-		i = i+1
-	end
-	-- Unused qualifiers
-	aEncoding = aEncoding:gsub("^[noNRV]", "")
-	
 	-- Then type encodings
-	local type = _typeEncodings[aEncoding:sub(i,i)]
+	local typeStr = _typeEncodings[encoding:sub(1,1)]
 
-	if type == nil then
-		_log("Error! type encoding '"..aEncoding.."' is not supported")
+	if typeStr == nil then
+		_log("Error! type encoding '", encoding, "' is not supported")
 		return nil
-	elseif type == "union" then
-		local unionType = _parseStructOrUnionEncoding(aEncoding:sub(i), true)
+	elseif typeStr == "union" then
+		local unionType = _parseStructOrUnionEncoding(encoding, true)
 		if unionType == nil then
-			_log("Error! type encoding '"..aEncoding.."' is not supported")
+			_log("Error! type encoding '", encoding, "' is not supported")
 			return nil
 		end
-		ret = ret .. unionType
-
-
-		--local name = aEncoding:sub(aEncoding:find("[^=^(]+"))
-		--if name == "?" then
-			--_log("Error! Anonymous unions not supported: "..aEncoding)
-			--return nil
-		--end
-		--ret = string.format("%s %s %s", ret, type, name)
-	elseif type == "struct" then
-		local structType = _parseStructOrUnionEncoding(aEncoding:sub(i), false)
+		ret = string.format("%s %s %s%s", ret, unionType, ptrStr, varName)
+	elseif typeStr == "struct" then
+		local structType = _parseStructOrUnionEncoding(encoding, false)
 		if structType == nil then
-			_log("Error! type encoding '"..aEncoding.."' is not supported")
+			_log("Error! type encoding '", encoding, "' is not supported")
 			return nil
 		end
-		ret = ret .. structType
+		ret = string.format("%s %s %s%s", ret, structType, ptrStr, varName)
+	elseif typeStr == "array" then
+		local arrType, arrCount = _parseArrayEncoding(encoding)
+		if arrType == nil then
+			_log("Error! type encoding '", encoding, "' is not supported")
+			return nil
+		end
+		ret = string.format("%s %s%s[%d]", arrType, ptrStr, varName, arrCount)
 	else
-		ret = string.format("%s %s", ret, type)
+		ret = string.format("%s %s %s%s", ret, typeStr, ptrStr, varName)
 	end
-	
-	if isPtr == true then
-		ret = ret.."*"
-	end
+
 	return ret
 end
-
 -- Creates a C function signature string for the given types
-function objc.impSignatureForTypeEncoding(retType, argTypes, name)
+function objc.impSignatureForTypeEncoding(signature, name)
 	name = name or "*" -- Default to an anonymous function pointer
-	retType = retType or "v"
-	argTypes = argTypes or {}
+	signature = signature or "v"
 	
-	retType = objc.typeEncodingToCType(retType)
-	if retType == nil then
+	local types = objc.parseTypeEncoding(signature)
+	if types == nil or #types == 0 then
 		return nil
 	end
-	local signature = retType.." ("..name..")("
+	local signature = objc.typeToCType(types[1]).." ("..name..")("
 
-	for i,type in pairs(argTypes) do
-		type = objc.typeEncodingToCType(type)
+	for i=2,#types do
+		local type = objc.typeToCType(types[i], "p"..(i-1))
+
 		if type == nil then
 			return nil
 		end
-		if i < #argTypes then
+		if i < #types then
 			type = type..","
 		end
 		signature = signature..type
@@ -336,19 +347,7 @@ end
 
 -- Creates a C function signature string for the IMP of a method
 function objc.impSignatureForMethod(method)
-	local typePtr = ffi.new("char[512]")
-
-	C.method_getReturnType(method, typePtr, 512)
-	local retType = ffi.string(typePtr)
-
-	local argCount = C.method_getNumberOfArguments(method)
-	local argTypes = {}
-	for j=0, argCount-1 do
-		C.method_getArgumentType(method, j, typePtr, 512);
-		table.insert(argTypes, ffi.string(typePtr))
-	end
-
-	return objc.impSignatureForTypeEncoding(retType, argTypes)
+	return objc.impSignatureForTypeEncoding(ffi.string(C.method_getTypeEncoding(method)))
 end
 
 -- Returns the IMP of a method correctly typecast
@@ -358,9 +357,7 @@ function objc.impForMethod(method)
 		return nil
 	end
 	_log("Reading method:", objc.selToStr(C.method_getName(method)), impTypeStr)
-
-	local imp = C.method_getImplementation(method);
-	return ffi.cast(_impTypeCache[impTypeStr], imp)
+	return ffi.cast(_impTypeCache[impTypeStr], C.method_getImplementation(method))
 end
 
 -- Convenience functions
@@ -369,8 +366,7 @@ function objc.objToStr(aObj) -- Automatically called with tostring(object)
 	if aObj == nil then
 		return "nil"
 	end
-	local str = aObj:description():UTF8String()
-	return ffi.string(str)
+	return ffi.string(aObj:description():UTF8String())
 end
 
 -- Converts a lua type to an objc object
@@ -391,7 +387,7 @@ function objc.Obj(v)
 	return nil
 end
 function objc.NSStr(aStr)
-	return objc.NSString:stringWithUTF8String_(aStr)
+	return objc.NSString:stringWithUTF8String_(ffi.cast("char*", aStr))
 end
 function objc.NSNum(aNum)
 	return NSNumber:numberWithDouble(aNum)
@@ -448,8 +444,8 @@ local function _setter(self, key, value)
 		return self[selector](self, value)
 	elseif objc.fallbackOnMsgSend == true then
 		return self:setValue_forKey_(Obj(value), NSStr(key))
-    else
-        print("[objc] Key "..key.." not found")
+	else
+		print("[objc] Key "..key.." not found")
 	end
 end
 
@@ -462,8 +458,8 @@ local function _getter(self, key)
 			return self[key](self)
 		elseif objc.fallbackOnMsgSend == true then
 			return self:valueForKey_(NSStr(key))
-        else
-            print("[objc] Key "..key.." not found")
+		else
+			print("[objc] Key "..key.." not found")
 		end
 	end
 end
@@ -597,7 +593,6 @@ ffi.metatype("struct objc_object", {
 })
 
 
-
 --
 -- Introspection and class extension
 
@@ -630,20 +625,19 @@ end
 -- If the method already exists, it is renamed to __{selector}
 -- The function must have self (id), and selector (SEL) as it's first two arguments
 -- Defaults are to return void and to take an object and a selector
-function objc.addMethod(class, selector, lambda, retType, argTypes)
-	retType = retType or "v"
-	argTypes = argTypes or {"@",":"}
-	local signature = objc.impSignatureForTypeEncoding(retType, argTypes)
+function objc.addMethod(class, selector, lambda, typeEncoding)
+	typeEncoding = typeEncoding or "v@:"
+	local signature = objc.impSignatureForTypeEncoding(typeEncoding)
 	local imp = ffi.cast(signature, lambda)
 	imp = ffi.cast("IMP", imp)
 
 	-- If one exists, the existing/super method will be renamed to this selector
 	local renamedSel = objc.SEL("__"..objc.selToStr(selector))
 	
-	local couldAddMethod = C.class_addMethod(class, selector, imp, retType..table.concat(argTypes))
+	local couldAddMethod = C.class_addMethod(class, selector, imp, typeEncoding)
 	if couldAddMethod == 0 then
 		-- If the method already exists, we just add the new method as old{selector} and swizzle them
-		if C.class_addMethod(class, renamedSel, imp, retType..table.concat(argTypes)) == 1 then
+		if C.class_addMethod(class, renamedSel, imp, typeEncoding) == 1 then
 			objc.swizzle(class, selector, renamedSel)
 		else
 			error("Couldn't replace method")
@@ -683,23 +677,19 @@ _sharedBlockDescriptor.reserved = 0;
 _sharedBlockDescriptor.size = ffi.sizeof("struct __block_literal_1")
 
 -- Wraps a function to be used with a block
-local function _createBlockWrapper(lambda, retType, argTypes)
-	-- Build a function definition string to cast to
-	retType = retType or "v"
-	argTypes = argTypes or {}
-	table.insert(argTypes, 1, "^v")
-
-	local funTypeStr = objc.impSignatureForTypeEncoding(retType, argTypes)
+local function _createBlockWrapper(lambda, typeEncoding)
+	typeEncoding = typeEncoding or "v"
+	typeEncoding = typeEncoding:sub(1,1) .. "^v" .. typeEncoding:sub(2)
 
 	ret = function(theBlock, ...)
 		return lambda(...)
 	end
-	return ffi.cast(funTypeStr, ret)
+	return ffi.cast(objc.impSignatureForTypeEncoding(typeEncoding), ret)
 end
 
 -- Creates a block and returns it typecast to 'id'
 local _blockType = ffi.typeof("struct __block_literal_1")
-function objc.createBlock(lambda, retType, argTypes)
+function objc.createBlock(lambda, typeEncoding)
 	if not lambda then
 		return nil
 	end
@@ -708,7 +698,7 @@ function objc.createBlock(lambda, retType, argTypes)
 	block.isa = C._NSConcreteGlobalBlock
 	block.flags = bit.lshift(1, 29)
 	block.reserved = 0
-	block.invoke = ffi.cast("void*", _createBlockWrapper(lambda, retType, argTypes))
+	block.invoke = ffi.cast("void*", _createBlockWrapper(lambda, typeEncoding))
 	block.descriptor = _sharedBlockDescriptor
 
 	return ffi.cast("id", block)
