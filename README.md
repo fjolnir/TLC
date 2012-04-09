@@ -42,7 +42,7 @@ objc.loadFramework("Foundation")
 local bs = require("objc.BridgeSupport")
 bs.loadFramework("Foundation")
 -- You can then access constants using bs
-myView.center = CGPointZero
+myView.center = bs.CGPointZero
 ```
 
 ### Accessing Objective-C objects
@@ -60,7 +60,7 @@ local myStr = NSString:stringWithUTF8String("I am an NSString.")
 --         selectorWithAnonymousParams:::: => selectorWithAnonymousParams()
 local anObject = MyObject:selector_with_multiple_parameters(arg1, arg2, arg3, arg4)
 ```
-## Creating Blocks from Lua Functions
+### Creating Blocks from Lua Functions
 ```lua
 -- To create a block you call createBlock with it's type encoding (Default being void return and no argument)
 -- To learn about type encodings read https://developer.apple.com/library/mac/#documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html
