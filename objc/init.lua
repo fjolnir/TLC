@@ -16,6 +16,7 @@
 -- OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 local ffi = require("ffi")
+local bit = require("bit")
 
 local objc = {
 	debug = false,
@@ -132,6 +133,14 @@ if ffi.arch ~= "arm" then
 	objc.loadFramework("Foundation")
 end
 
+local CFRelease = C.CFRelease
+if objc.debug == true then
+	CFRelease = function(obj)
+		_log("Releasing object of class", ffi.string(C.object_getClassName(obj)), ffi.cast("void*", obj))
+		C.CFRelease(obj)
+	end
+end
+
 setmetatable(objc, {
 	__index = function(t, key)
 		local ret = C.objc_getClass(key)
@@ -165,6 +174,7 @@ local _impTypeCache = setmetatable({}, {__index=function(t,impSig)
 end})
 local _idType = ffi.typeof("struct objc_object*")
 objc.idType = _idType
+local _UINT_MAX = 0xffffffffffffffffULL
 
 -- Parses an ObjC type encoding string into an array of type dictionaries
 function objc.parseTypeEncoding(str)
@@ -351,7 +361,7 @@ function objc.impForMethod(method)
 	if impSignature == nil then
 		return nil
 	end
-	if objc.debug then _log("Reading method:", objc.selToStr(C.method_getName(method)), typeEncoding, impTypeStr) end
+	if objc.debug then _log("Reading method:", objc.selToStr(C.method_getName(method)), typeEncoding, impSignature) end
 	return ffi.cast(_impTypeCache[impSignature], C.method_getImplementation(method))
 end
 
@@ -512,11 +522,13 @@ ffi.metatype("struct objc_class", {
 
 				if ffi.istype(_idType, ret) and ret ~= nil then
 					_classNameCache[ret] = className
-					if (selStr:sub(1,5) ~= "alloc" and selStr ~= "new")  then
-						ret:retain()
-					end
-					if selStr:sub(1,5) ~= "alloc" then
-						ret = ffi.gc(ret, C.CFRelease)
+					if ret:retainCount() ~= _UINT_MAX then
+						if (selStr:sub(1,5) ~= "alloc" and selStr ~= "new")  then
+							ret:retain()
+						end
+						if selStr:sub(1,5) ~= "alloc" then
+							ret = ffi.gc(ret, CFRelease)
+						end
 					end
 				end
 				return ret
@@ -572,11 +584,13 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 
 			if ffi.istype(_idType, ret) and ret ~= nil and not (selStr == "retain" or selStr == "release") then
 				_classNameCache[ret] = ffi.string(C.object_getClassName(ret))
-				-- Retain objects that need to be retained
-				if not (selStr:sub(1,4) == "init" or selStr:sub(1,4) == "copy" or selStr:sub(1,11) == "mutableCopy") then
-					ret:retain()
+				-- If the retain count is UINT_MAX that means that the object should not be released
+				if ret:retainCount() ~= _UINT_MAX then
+					if not (selStr:sub(1,4) == "init" or selStr:sub(1,4) == "copy" or selStr:sub(1,11) == "mutableCopy") then
+						ret:retain()
+					end
+					ret = ffi.gc(ret, CFRelease)
 				end
-				ret = ffi.gc(ret, C.CFRelease)
 			end
 			return ret
 		end
@@ -659,7 +673,7 @@ ffi.cdef[[
 struct __block_descriptor_1 {
 	unsigned long int reserved; // NULL
 	unsigned long int size; // sizeof(struct __block_literal_1)
-}
+};
 
 struct __block_literal_1 {
 	struct __block_literal_1 *isa;
@@ -667,8 +681,9 @@ struct __block_literal_1 {
 	int reserved;
 	void *invoke;
 	struct __block_descriptor_1 *descriptor;
-}
-struct __block_literal_1 *_NSConcreteGlobalBlock;
+};
+
+const struct __block_literal_1 *_NSConcreteGlobalBlock;
 ]]
 
 local _sharedBlockDescriptor = ffi.new("struct __block_descriptor_1")
