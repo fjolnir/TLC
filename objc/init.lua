@@ -64,6 +64,7 @@ typedef id (*IMP)(id, SEL, ...);
 typedef signed char BOOL;
 typedef struct objc_method *Method;
 struct objc_method_description { SEL name; char *types; };
+typedef struct objc_ivar *Ivar;
 
 id objc_msgSend(id theReceiver, SEL theSelector, ...);
 Class objc_allocateClassPair(Class superclass, const char *name, size_t extraBytes);
@@ -93,7 +94,6 @@ IMP method_getImplementation(Method method);
 const char *method_getTypeEncoding(Method method);
 void method_exchangeImplementations(Method m1, Method m2);
 
-typedef struct objc_ivar *Ivar;
 const char * ivar_getTypeEncoding(Ivar ivar);
 ptrdiff_t ivar_getOffset(Ivar ivar);
 
@@ -141,6 +141,7 @@ end
 local CFRelease = C.CFRelease
 if objc.debug == true then
 	CFRelease = function(obj)
+		-- We cast the object to void in order to print the address without invoking __tostring
 		_log("Releasing object of class", ffi.string(C.object_getClassName(obj)), ffi.cast("void*", obj))
 		C.CFRelease(obj)
 	end
