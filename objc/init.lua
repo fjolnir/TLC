@@ -79,9 +79,11 @@ BOOL class_respondsToSelector(Class cls, SEL sel);
 Class class_getSuperclass(Class cls);
 IMP class_replaceMethod(Class cls, SEL name, IMP imp, const char *types);
 BOOL class_addMethod(Class cls, SEL name, IMP imp, const char *types);
+BOOL class_addIvar(Class cls, const char *name, size_t size, uint8_t alignment, const char *types);
 
 Class object_getClass(id object);
 const char *object_getClassName(id obj);
+Ivar object_getInstanceVariable(id obj, const char *name, void **outValue);
 
 SEL method_getName(Method method);
 unsigned method_getNumberOfArguments(Method method);
@@ -91,6 +93,9 @@ IMP method_getImplementation(Method method);
 const char *method_getTypeEncoding(Method method);
 void method_exchangeImplementations(Method m1, Method m2);
 
+typedef struct objc_ivar *Ivar;
+const char * ivar_getTypeEncoding(Ivar ivar);
+ptrdiff_t ivar_getOffset(Ivar ivar);
 
 SEL sel_registerName(const char *str);
 const char* sel_getName(SEL aSelector);
@@ -610,8 +615,25 @@ ffi.metatype("struct objc_object", {
 -- Introspection and class extension
 
 -- Creates and returns a new subclass of superclass (or if superclass is nil, a new root class)
-function objc.createClass(superclass, className)
+-- Last argument is an optional table of ivars, keyed by name with values containing the type encoding for the var
+function objc.createClass(superclass, className, ivars)
+	ivars = ivars or {}
 	local class = C.objc_allocateClassPair(superclass, className, 0)
+
+	for name, typeEnc in pairs(ivars) do
+		-- Parse the type and get the size
+		local typeArr = objc.parseTypeEncoding(typeEnc)
+		if typeArr ~= nil and #typeArr == 1 then
+			local cType = objc.typeToCType(typeArr[1])
+			if cType ~= nil then
+				local ffiType = ffi.typeof(cType)
+				local size = ffi.sizeof(ffiType)
+				local alignment = ffi.alignof(ffiType)
+				C.class_addIvar(class, name, size, alignment, typeEnc)
+			end
+		end
+	end
+
 	C.objc_registerClassPair(class)
 	return class
 end
@@ -662,6 +684,44 @@ function objc.addMethod(class, selector, lambda, typeEncoding)
 			C.class_addMethod(class, renamedSel, C.method_getImplementation(superMethod), C.method_getTypeEncoding(superMethod))
 		end
 	end
+end
+
+local function _getIvarInfo(instance, ivarName)
+		local ivar = C.object_getInstanceVariable(instance, ivarName, nil)
+	if ivar == nil then
+		return nil
+	end
+	local typeEnc = ffi.string(C.ivar_getTypeEncoding(ivar))
+	local typeArr = objc.parseTypeEncoding(typeEnc)
+	if typeArr == nil or #typeArr ~= 1 then
+		return nil
+	end
+	local cType = objc.typeToCType(typeArr[1])
+	if cType == nil then
+		return nil
+	end
+	local offset = C.ivar_getOffset(ivar)
+	return ivar, offset, typeEnc, cType
+end
+
+-- Gets the value of an ivar
+function objc.getIvar(instance, ivarName)
+	local ivar, offset, typeEnc, cType  = _getIvarInfo(instance, ivarName)
+	if ivar == nil then
+		return nil
+	end
+	local ptr = ffi.cast(cType.."*", instance+offset)
+	return ptr[0]
+end
+
+-- Sets the value of an ivar
+function objc.setIvar(instance, ivarName, value)
+	local ivar, offset, typeEnc, cType  = _getIvarInfo(instance, ivarName)
+	if ivar == nil then
+		return nil
+	end
+	local ptr = ffi.cast(cType.."*", instance+offset)
+	ptr[0] = value
 end
 
 
