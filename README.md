@@ -76,6 +76,8 @@ local object = Obj(anyVariable)
 ### Subclassing & Extending of Classes
 ```lua
 -- This creates a class and registers it with the runtime (it is also accessible with objc.MyClass after creation)
+-- The dictionary specifies an instance variable of type int(type encoding: i)
+-- To learn about type encodings read https://developer.apple.com/library/mac/#documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html
 local MyClass = objc.createClass(objc.NSObject, "MyClass", { ivar="i" })
 
 -- Creates an init method returning an object(@) and taking as arguments an object(@) and a selector(:)
@@ -104,7 +106,6 @@ print(instance:ivar())
 ### Creating Blocks from Lua Functions
 ```lua
 -- To create a block you call createBlock with it's type encoding (Default being void return and no argument)
--- To learn about type encodings read https://developer.apple.com/library/mac/#documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html
 -- A block returning an integer and taking one object and one double as arguments
 local block = objc.createBlock(function(object, double)
 	print("I was passed these arguments: ", object, double)
