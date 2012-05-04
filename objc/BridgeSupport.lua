@@ -15,9 +15,10 @@ else -- 32Bit (Only ARM these days)
 	typeKey = "type"
 end
 
-
+local _loadingGlobally = false
 -- Loads the bridgesupport file for the framework 'name'
-function bs.loadFramework(name, absolute)
+function bs.loadFramework(name, global, absolute)
+	_loadingGlobally = global
 	objc.loadFramework(name, absolute)
 	local canRead = bit.lshift(1,2)
 
@@ -60,9 +61,11 @@ local _parseCallbacks = {
 		--elseif name == "retval" then
 		--elseif name == "signatures" then
 		if name == "string_constant" then
-			bs[attrs.name] = attrs.value
+			rawset(bs, attrs.name, attrs.value)
+			if _loadingGlobally == true then _G[attrs.name] = rawget(bs, attrs.name) end
 		elseif name == "enum" then
-			bs[attrs.name] = tonumber(attrs.value)
+			rawset(bs, attrs.name, attrs.value)
+			if _loadingGlobally == true then _G[attrs.name] = rawget(bs, attrs.name) end
 		elseif name == "struct" then
 			local type = objc.parseTypeEncoding(attrs[typeKey] or attrs.type)
 			if type ~= nil and #type > 0 then
@@ -72,7 +75,8 @@ local _parseCallbacks = {
 					if success == false then
 						print("[bs] Error loading function "..attrs.name..": "..err)
 					else
-						bs[attrs.name] = ffi.typeof(attrs.name)
+						rawset(bs, attrs.name, ffi.typeof(attrs.name))
+						if _loadingGlobally == true then _G[attrs.name] = rawget(bs, attrs.name) end
 					end
 				end
 			end
@@ -103,7 +107,7 @@ local _parseCallbacks = {
 			local n = 0
 			for o in attrs.path:gfind(".framework") do n=n+1 end
 			if bs.loadDependencies == true or n >= 2 then
-				bs.loadFramework(attrs.path, true)
+				bs.loadFramework(attrs.path, _loadingGlobally, true)
 			end
 		--elseif name == "opaque" then
 		--elseif name == "informal_protocol" then
@@ -115,7 +119,8 @@ local _parseCallbacks = {
 			local sig = _curObj.retval..table.concat(_curObj.args)
 			local signature = objc.impSignatureForTypeEncoding(sig, _curObj.name)
 			if signature ~= nil then
-				ffi.cdef(signature)
+				--print("set:", signature, ffi.cdef(signature))
+				if _loadingGlobally == true then _G[_curObj.name] = C[_curObj.name] end
 			end
 			_curObj = nil
 		end
