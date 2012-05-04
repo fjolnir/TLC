@@ -412,6 +412,15 @@ function objc.NSDic(aTable)
 	return ret
 end
 
+local _tonumber = tonumber
+local _doubleValSel = SEL("doubleValue")
+tonumber = function(val, ...)
+	if type(val) == "cdata" and ffi.istype(_idType, val) and val:respondsToSelector(_doubleValSel) then
+		return val:doubleValue()
+	end
+	return _tonumber(val, ...)
+end
+
 -- Method calls
 
 -- Takes a selector string (with colons replaced by underscores) and returns the number of arguments)
