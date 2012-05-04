@@ -101,7 +101,6 @@ SEL sel_registerName(const char *str);
 const char* sel_getName(SEL aSelector);
 
 void free(void *ptr);
-void CFRelease(id obj);
 
 // Used to check if a file exists
 int access(const char *path, int amode);
@@ -136,15 +135,14 @@ if ffi.arch ~= "arm" then
 	ffi.load("/usr/lib/libobjc.A.dylib", true)
 	objc.loadFramework("CoreFoundation")
 	objc.loadFramework("Foundation")
+	objc.loadFramework("Carbon")
 end
 
-local CFRelease = C.CFRelease
-if objc.debug == true then
-	CFRelease = function(obj)
-		-- We cast the object to void in order to print the address without invoking __tostring
-		_log("Releasing object of class", ffi.string(C.object_getClassName(obj)), ffi.cast("void*", obj))
-		C.CFRelease(obj)
+local function _release(obj)
+	if objc.debug then
+		_log("Releasing object of class", ffi.string(C.class_getName(obj:class())), ffi.cast("void*", obj))
 	end
+	obj:release()
 end
 
 setmetatable(objc, {
@@ -528,14 +526,17 @@ ffi.metatype("struct objc_class", {
 
 				if ffi.istype(_idType, ret) and ret ~= nil then
 					_classNameCache[ret] = className
-					if ret:retainCount() ~= _UINT_MAX then
+					--if ret:retainCount() ~= _UINT_MAX then
 						if (selStr:sub(1,5) ~= "alloc" and selStr ~= "new")  then
+							if objc.debug then
+								_log("Retaining object of class", ffi.string(C.class_getName(ret:class())), ffi.cast("void*", ret))
+							end
 							ret:retain()
 						end
 						if selStr:sub(1,5) ~= "alloc" then
-							ret = ffi.gc(ret, CFRelease)
+							ret = ffi.gc(ret, _release)
 						end
-					end
+					--end
 				end
 				return ret
 			end
@@ -591,12 +592,15 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 			if ffi.istype(_idType, ret) and ret ~= nil and not (selStr == "retain" or selStr == "release") then
 				_classNameCache[ret] = ffi.string(C.object_getClassName(ret))
 				-- If the retain count is UINT_MAX that means that the object should not be released
-				if ret:retainCount() ~= _UINT_MAX then
+				--if ret:retainCount() ~= _UINT_MAX then
 					if not (selStr:sub(1,4) == "init" or selStr:sub(1,4) == "copy" or selStr:sub(1,11) == "mutableCopy") then
+						if objc.debug then
+							_log("Retaining object of class", ffi.string(C.class_getName(ret:class())), ffi.cast("void*", ret))
+						end
 						ret:retain()
 					end
-					ret = ffi.gc(ret, CFRelease)
-				end
+					ret = ffi.gc(ret, _release)
+				--end
 			end
 			return ret
 		end
