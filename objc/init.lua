@@ -182,9 +182,6 @@ local _UINT_MAX = 0xffffffffffffffffULL
 
 -- Parses an ObjC type encoding string into an array of type dictionaries
 function objc.parseTypeEncoding(str)
-	local last = 1
-	local ret = {}
-	local i = 1
 	local fieldIdx = 1
 	local fields = { { name = "", type = "", indirection = 0, isConst = false} }
 	local depth = 0
@@ -192,9 +189,9 @@ function objc.parseTypeEncoding(str)
 	local curField = fields[1]
 	
 	local temp
-	while i <= #str do
+	for i=1, #str do
 		c = str:sub(i,i)
-		if	 c:find("^[{%(%[]") then depth = depth + 1
+		if     c:find("^[{%(%[]") then depth = depth + 1
 		elseif c:find("^[}%)%]]") then depth = depth - 1
 		elseif c == '"' then inQuotes = not inQuotes;
 		end
@@ -211,7 +208,6 @@ function objc.parseTypeEncoding(str)
 			fields[fieldIdx] = { name = "", type = "", indirection = 0 } 
 			curField = fields[fieldIdx]
 		end
-		i = i + 1
 	end
 	-- If the last field was blank, remove it
 	if #fields[fieldIdx].name == 0 then
@@ -285,6 +281,7 @@ local function _parseStructOrUnionEncoding(encoded, isUnion)
 end
 
 -- Takes a type table (contains type info for a single type, obtained using parseTypeEncoding), and converts it to a  c signature
+-- The optional second argument specifies whether or not 
 local _typeEncodings = {
 	["@"] = "id", ["#"] = "Class", ["c"] = "char", ["C"] = "unsigned char",
 	["s"] = "short", ["S"] = "unsigned short", ["i"] = "int", ["I"] = "unsigned int",
@@ -294,7 +291,6 @@ local _typeEncodings = {
 }
 function objc.typeToCType(type, varName)
 	varName = varName or ""
-	local i = 1
 	local ret = ""
 	local encoding = type.type
 	local ptrStr = ("*"):rep(type.indirection)
