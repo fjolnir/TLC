@@ -367,7 +367,7 @@ end
 
 -- Convenience functions
 
-function objc.objToStr(aObj) -- Automatically called with tostring(object)
+function objc.objToStr(aObj) -- Automatically called by tostring(object)
 	if aObj == nil then
 		return "nil"
 	end
@@ -395,7 +395,7 @@ function objc.NSStr(aStr)
 	return objc.NSString:stringWithUTF8String_(ffi.cast("char*", aStr))
 end
 function objc.NSNum(aNum)
-	return NSNumber:numberWithDouble(aNum)
+	return objc.NSNumber:numberWithDouble(aNum)
 end
 function objc.NSArr(aTable)
 	local ret = NSMutableArray:array()
