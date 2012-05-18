@@ -123,121 +123,126 @@ typedef int dispatch_fd_t;
 
 local lib = ffi.C --load("dispatch")
 
-dispatch.object_t = ffi.typeof("dispatch_object_t")
-dispatch.function_t = ffi.typeof("dispatch_function_t")
-dispatch.time_t = ffi.typeof("dispatch_time_t")
-dispatch.queue_t = ffi.typeof("dispatch_queue_t")
-dispatch.queue_attr_t = ffi.typeof("dispatch_queue_attr_t")
-dispatch.queue_priority_t = ffi.typeof("dispatch_queue_priority_t")
-dispatch.source_t = ffi.typeof("dispatch_source_t")
-dispatch.source_type_t = ffi.typeof("dispatch_source_type_t")
-dispatch.source_mach_send_flags_t = ffi.typeof("dispatch_source_mach_send_flags_t")
-dispatch.source_proc_flags_t = ffi.typeof("dispatch_source_proc_flags_t")
-dispatch.source_vnode_flags_t = ffi.typeof("dispatch_source_vnode_flags_t")
-dispatch.group_t = ffi.typeof("dispatch_group_t")
-dispatch.semaphore_t = ffi.typeof("dispatch_semaphore_t")
-dispatch.once_t = ffi.typeof("dispatch_once_t")
-dispatch.data_t = ffi.typeof("dispatch_data_t")
-dispatch.fd_t = ffi.typeof("dispatch_fd_t")
 
-dispatch.emptyData = ffi.cast(dispatch.data_t, lib._dispatch_data_empty)
-dispatch.defaultDataDestructor = nil
+-- Types
+dispatch.object_t                        = ffi.typeof("dispatch_object_t")
+dispatch.function_t                      = ffi.typeof("dispatch_function_t")
+dispatch.time_t                          = ffi.typeof("dispatch_time_t")
+dispatch.queue_t                         = ffi.typeof("dispatch_queue_t")
+dispatch.queue_attr_t                    = ffi.typeof("dispatch_queue_attr_t")
+dispatch.queue_priority_t                = ffi.typeof("dispatch_queue_priority_t")
+dispatch.source_t                        = ffi.typeof("dispatch_source_t")
+dispatch.source_type_t                   = ffi.typeof("dispatch_source_type_t")
+dispatch.source_mach_send_flags_t        = ffi.typeof("dispatch_source_mach_send_flags_t")
+dispatch.source_proc_flags_t             = ffi.typeof("dispatch_source_proc_flags_t")
+dispatch.source_vnode_flags_t            = ffi.typeof("dispatch_source_vnode_flags_t")
+dispatch.group_t                         = ffi.typeof("dispatch_group_t")
+dispatch.semaphore_t                     = ffi.typeof("dispatch_semaphore_t")
+dispatch.once_                           = ffi.typeof("dispatch_once_t")
+dispatch.data_t                          = ffi.typeof("dispatch_data_t")
+dispatch.fd_t                            = ffi.typeof("dispatch_fd_t")
 
-dispatch.nsecPerSec  = 1000000000ull
-dispatch.nsecPerMsec = 1000000ull
-dispatch.usecPerSec  = 1000000ull
-dispatch.nsecPerUsec = 1000ull
 
-dispatch.timeNow     = 0
-dispatch.timeForever = bit.bnot(0)
+-- Contants
+dispatch.emptyData                       = ffi.cast(dispatch.data_t, lib._dispatch_data_empty)
+dispatch.defaultDataDestructor           = nil
 
-dispatch.highPriority       = ffi.cast(dispatch.queue_priority_t, 2)
-dispatch.defaultPriority    = ffi.cast(dispatch.queue_priority_t, 0)
-dispatch.lowPriority        = ffi.cast(dispatch.queue_priority_t, -2)
-dispatch.backgroundPriority = ffi.cast(dispatch.queue_priority_t, -32768) -- INT16_MIN
+dispatch.nsecPerSec                      = 1000000000ull
+dispatch.nsecPerMsec                     = 1000000ull
+dispatch.usecPerSec                      = 1000000ull
+dispatch.nsecPerUsec                     = 1000ull
 
-dispatch.mainQueue           = lib._dispatch_main_q
-dispatch.serialQueueAttr     = nil
-dispatch.concurrentQueueAttr = lib._dispatch_queue_attr_concurrent
-dispatch.defaultTargetQueue  = nil
+dispatch.timeNow                         = 0
+dispatch.timeForever                     = bit.bnot(0)
 
-dispatch.machSendDead = ffi.cast(dispatch.source_proc_flags_t, 0x1)
-dispatch.procExit     = ffi.cast(dispatch.source_proc_flags_t, 0x80000000)
-dispatch.procFork     = ffi.cast(dispatch.source_proc_flags_t, 0x40000000)
-dispatch.procExec     = ffi.cast(dispatch.source_proc_flags_t, 0x20000000)
-dispatch.procSignal   = ffi.cast(dispatch.source_proc_flags_t, 0x08000000)
+dispatch.highPriority                    = ffi.cast(dispatch.queue_priority_t, 2)
+dispatch.defaultPriority                 = ffi.cast(dispatch.queue_priority_t, 0)
+dispatch.lowPriority                     = ffi.cast(dispatch.queue_priority_t, -2)
+dispatch.backgroundPriority              = ffi.cast(dispatch.queue_priority_t, -32768) -- INT16_MIN
 
-dispatch.sourceTypeDataAdd  = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_data_add)
-dispatch.sourceTypeDataOr   = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_data_or)
-dispatch.sourceTypeMachSend = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_mach_send)
-dispatch.sourceTypeMachRecv = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_mach_recv)
-dispatch.sourceTypeProc     = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_proc)
-dispatch.sourceTypeRead     = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_read)
-dispatch.sourceTypeSignal   = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_signal)
-dispatch.sourceTypeTimer    = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_timer)
-dispatch.sourceTypeVnode    = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_vnode)
-dispatch.sourceTypeWrite    = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_write)
-dispatch.vNodeDelete = ffi.cast(dispatch.source_vnode_flags_t, 0x1)
-dispatch.vNodeWrite  = ffi.cast(dispatch.source_vnode_flags_t, 0x2)
-dispatch.vNodeExtend = ffi.cast(dispatch.source_vnode_flags_t, 0x4)
-dispatch.vNodeAttrib = ffi.cast(dispatch.source_vnode_flags_t, 0x8)
-dispatch.vNodeLink   = ffi.cast(dispatch.source_vnode_flags_t, 0x10)
-dispatch.vNodeRename = ffi.cast(dispatch.source_vnode_flags_t, 0x20)
-dispatch.vNodeRevoke = ffi.cast(dispatch.source_vnode_flags_t, 0x40)
+dispatch.mainQueue                       = lib._dispatch_main_q
+dispatch.serialQueueAttr                 = nil
+dispatch.concurrentQueueAttr             = lib._dispatch_queue_attr_concurrent
+dispatch.defaultTargetQueue              = nil
 
--- Nicer function aliases
-dispatch.debug = lib.dispatch_debug
-dispatch.debugv = lib.dispatch_debugv
-dispatch.retain = lib.dispatch_retain
-dispatch.release = lib.dispatch_release
-dispatch.dispatch_get_context = lib.dispatch_get_context
-dispatch.set_context = lib.dispatch_set_context
-dispatch.set_finalizer = lib.dispatch_set_finalizer_f
-dispatch.suspend = lib.dispatch_suspend
-dispatch.resume = lib.dispatch_resume
+dispatch.machSendDead                    = ffi.cast(dispatch.source_proc_flags_t, 0x1)
+dispatch.procExit                        = ffi.cast(dispatch.source_proc_flags_t, 0x80000000)
+dispatch.procFork                        = ffi.cast(dispatch.source_proc_flags_t, 0x40000000)
+dispatch.procExec                        = ffi.cast(dispatch.source_proc_flags_t, 0x20000000)
+dispatch.procSignal                      = ffi.cast(dispatch.source_proc_flags_t, 0x08000000)
 
-dispatch.time = lib.dispatch_time
-dispatch.walltime = lib.dispatch_walltime
+dispatch.sourceTypeDataAdd               = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_data_add)
+dispatch.sourceTypeDataOr                = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_data_or)
+dispatch.sourceTypeMachSend              = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_mach_send)
+dispatch.sourceTypeMachRecv              = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_mach_recv)
+dispatch.sourceTypeProc                  = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_proc)
+dispatch.sourceTypeRead                  = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_read)
+dispatch.sourceTypeSignal                = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_signal)
+dispatch.sourceTypeTimer                 = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_timer)
+dispatch.sourceTypeVnode                 = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_vnode)
+dispatch.sourceTypeWrite                 = ffi.cast(dispatch.source_type_t, lib._dispatch_source_type_write)
+dispatch.vNodeDelete                     = ffi.cast(dispatch.source_vnode_flags_t, 0x1)
+dispatch.vNodeWrite                      = ffi.cast(dispatch.source_vnode_flags_t, 0x2)
+dispatch.vNodeExtend                     = ffi.cast(dispatch.source_vnode_flags_t, 0x4)
+dispatch.vNodeAttrib                     = ffi.cast(dispatch.source_vnode_flags_t, 0x8)
+dispatch.vNodeLink                       = ffi.cast(dispatch.source_vnode_flags_t, 0x10)
+dispatch.vNodeRename                     = ffi.cast(dispatch.source_vnode_flags_t, 0x20)
+dispatch.vNodeRevoke                     = ffi.cast(dispatch.source_vnode_flags_t, 0x40)
 
-dispatch.async = lib.dispatch_async_f
-dispatch.sync = lib.dispatch_sync_f
-dispatch.apply = lib.dispatch_apply_f
-dispatch.get_current_queue = lib.dispatch_get_current_queue
-dispatch.get_global_queue = lib.dispatch_get_global_queue
-dispatch.queue_create = lib.dispatch_queue_create
-dispatch.dispatch_queue_get_label = lib.dispatch_queue_get_label
-dispatch.set_target_queue = lib.dispatch_set_target_queue
-dispatch.main = lib.dispatch_main
-dispatch.after = lib.dispatch_after_f
-dispatch.barrier_async = lib.dispatch_barrier_async_f
-dispatch.barrier_sync = lib.dispatch_barrier_sync_f
-dispatch.queue_set_specific = lib.dispatch_queue_set_specific
-dispatch.dispatch_queue_get_specific = lib.dispatch_queue_get_specific
-dispatch.dispatch_get_specific = lib.dispatch_get_specific
 
-dispatch.source_create = lib.dispatch_source_create
-dispatch.source_set_event_handler = lib.dispatch_source_set_event_handler_f
-dispatch.source_set_cancel_handler = lib.dispatch_source_set_cancel_handler_f
-dispatch.source_cancel = lib.dispatch_source_cancel
-dispatch.source_testcancel = lib.dispatch_source_testcancel
-dispatch.source_get_handle = lib.dispatch_source_get_handle
-dispatch.source_get_mask = lib.dispatch_source_get_mask
-dispatch.source_get_data = lib.dispatch_source_get_data
-dispatch.source_merge_data = lib.dispatch_source_merge_data
-dispatch.source_set_timer = lib.dispatch_source_set_timer
+-- Functions
+dispatch.debug                           = lib.dispatch_debug
+dispatch.debugv                          = lib.dispatch_debugv
+dispatch.retain                          = lib.dispatch_retain
+dispatch.release                         = lib.dispatch_release
+dispatch.dispatch_get_context            = lib.dispatch_get_context
+dispatch.set_context                     = lib.dispatch_set_context
+dispatch.set_finalizer                   = lib.dispatch_set_finalizer_f
+dispatch.suspend                         = lib.dispatch_suspend
+dispatch.resume                          = lib.dispatch_resume
+
+dispatch.time                            = lib.dispatch_time
+dispatch.walltime                        = lib.dispatch_walltime
+
+dispatch.async                           = lib.dispatch_async_f
+dispatch.sync                            = lib.dispatch_sync_f
+dispatch.apply                           = lib.dispatch_apply_f
+dispatch.get_current_queue               = lib.dispatch_get_current_queue
+dispatch.get_global_queue                = lib.dispatch_get_global_queue
+dispatch.queue_create                    = lib.dispatch_queue_create
+dispatch.dispatch_queue_get_label        = lib.dispatch_queue_get_label
+dispatch.set_target_queue                = lib.dispatch_set_target_queue
+dispatch.main                            = lib.dispatch_main
+dispatch.after                           = lib.dispatch_after_f
+dispatch.barrier_async                   = lib.dispatch_barrier_async_f
+dispatch.barrier_sync                    = lib.dispatch_barrier_sync_f
+dispatch.queue_set_specific              = lib.dispatch_queue_set_specific
+dispatch.dispatch_queue_get_specific     = lib.dispatch_queue_get_specific
+dispatch.dispatch_get_specific           = lib.dispatch_get_specific
+
+dispatch.source_create                   = lib.dispatch_source_create
+dispatch.source_set_event_handler        = lib.dispatch_source_set_event_handler_f
+dispatch.source_set_cancel_handler       = lib.dispatch_source_set_cancel_handler_f
+dispatch.source_cancel                   = lib.dispatch_source_cancel
+dispatch.source_testcancel               = lib.dispatch_source_testcancel
+dispatch.source_get_handle               = lib.dispatch_source_get_handle
+dispatch.source_get_mask                 = lib.dispatch_source_get_mask
+dispatch.source_get_data                 = lib.dispatch_source_get_data
+dispatch.source_merge_data               = lib.dispatch_source_merge_data
+dispatch.source_set_timer                = lib.dispatch_source_set_timer
 dispatch.source_set_registration_handler = lib.dispatch_source_set_registration_handler_f
 
-dispatch.group_create = lib.dispatch_group_create
-dispatch.group_async = lib.dispatch_group_async_f
-dispatch.group_wait = lib.dispatch_group_wait
-dispatch.group_notify = lib.dispatch_group_notify_f
-dispatch.group_enter = lib.dispatch_group_enter
-dispatch.group_leave = lib.dispatch_group_leave
+dispatch.group_create                    = lib.dispatch_group_create
+dispatch.group_async                     = lib.dispatch_group_async_f
+dispatch.group_wait                      = lib.dispatch_group_wait
+dispatch.group_notify                    = lib.dispatch_group_notify_f
+dispatch.group_enter                     = lib.dispatch_group_enter
+dispatch.group_leave                     = lib.dispatch_group_leave
 
-dispatch.semaphore_create = lib.dispatch_semaphore_create
-dispatch.semaphore_wait = lib.dispatch_semaphore_wait
-dispatch.semaphore_signal = lib.dispatch_semaphore_signal
+dispatch.semaphore_create                = lib.dispatch_semaphore_create
+dispatch.semaphore_wait                  = lib.dispatch_semaphore_wait
+dispatch.semaphore_signal                = lib.dispatch_semaphore_signal
 
-dispatch.once = lib.dispatch_once_f
+dispatch.once                            = lib.dispatch_once_f
 
 return dispatch
