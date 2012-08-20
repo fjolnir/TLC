@@ -1,7 +1,7 @@
 -- Ported from LuaCocoa's MinimalAppKit example
 -- Creates a quit menu item and a window. Very minimal indeed.
 
-package.path = package.path .. ';../?/init.lua'
+package.path = package.path .. ';?/init.lua;../?.lua'
 local objc = require("objc")
 local bs = require("objc.BridgeSupport")
 bs.loadFramework("Foundation", true)
@@ -27,8 +27,8 @@ appMenu:addItem(quitMenuItem)
 appMenuItem:setSubmenu(appMenu)
 
 -- Create a window
-local mainWindow = NSWindow:alloc():initWithContentRect_styleMask_backing_defer(CGRect(CGPoint(0, 0), CGSize(200, 200)), NSTitledWindowMask, NSBackingStoreBuffered, false)
-mainWindow:cascadeTopLeftFromPoint(CGPoint(20,20))
+local mainWindow = NSWindow:alloc():initWithContentRect_styleMask_backing_defer({{0, 0}, {200, 200}}, NSTitledWindowMask, NSBackingStoreBuffered, false)
+mainWindow:cascadeTopLeftFromPoint({20,20})
 mainWindow:setTitle(appName)
 mainWindow:makeKeyAndOrderFront(NSApp)
 
