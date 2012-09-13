@@ -400,14 +400,14 @@ function objc.NSNum(aNum)
     return objc.NSNumber:numberWithDouble(aNum)
 end
 function objc.NSArr(aTable)
-    local ret = NSMutableArray:array()
+    local ret = objc.NSMutableArray:array()
     for i,v in ipairs(aTable) do
         ret:addObject(objc.Obj(v))
     end
     return ret
 end
 function objc.NSDic(aTable)
-    local ret = NSMutableDictionary:dictionary()
+    local ret = objc.NSMutableDictionary:dictionary()
     for k,v in pairs(aTable) do
         ret:setObject_forKey(objc.Obj(v), objc.Obj(k))
     end
@@ -750,7 +750,7 @@ struct __block_literal_1 {
     struct __block_descriptor_1 *descriptor;
 };
 
-const struct __block_literal_1 *_NSConcreteGlobalBlock;
+struct __block_literal_1 *_NSConcreteGlobalBlock;
 ]]
 
 local _sharedBlockDescriptor = ffi.new("struct __block_descriptor_1")
@@ -762,7 +762,7 @@ local function _createBlockWrapper(lambda, typeEncoding)
     typeEncoding = typeEncoding or "v"
     typeEncoding = typeEncoding:sub(1,1) .. "^v" .. typeEncoding:sub(2)
 
-    ret = function(theBlock, ...)
+    local ret = function(theBlock, ...)
         return lambda(...)
     end
     return ffi.cast(objc.impSignatureForTypeEncoding(typeEncoding), ret)
