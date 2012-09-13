@@ -31,7 +31,7 @@ local objc = {
 
 local function _log(...)
     if objc.debug == true then
-        args = {...}
+        local args = {...}
         for i=1, #args do
             args[i] = tostring(args[i])
         end
