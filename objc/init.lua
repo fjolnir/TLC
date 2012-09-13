@@ -69,6 +69,8 @@ typedef struct objc_ivar *Ivar;
 id objc_msgSend(id theReceiver, SEL theSelector, ...);
 Class objc_allocateClassPair(Class superclass, const char *name, size_t extraBytes);
 void objc_registerClassPair(Class cls);
+id objc_retain(id obj);
+void objc_release(id obj);
 
 Class objc_getClass(const char *name);
 const char *class_getName(Class cls);
@@ -140,9 +142,9 @@ end
 
 local function _release(obj)
     if objc.debug then
-        _log("Releasing object of class", ffi.string(C.class_getName(obj:class())), ffi.cast("void*", obj))
+        _log("Releasing object of class", ffi.string(C.class_getName(obj:class())), ffi.cast("void*", obj), "Refcount: ", obj:retainCount())
     end
-    obj:release()
+    C.objc_release(obj)
 end
 
 setmetatable(objc, {
@@ -531,17 +533,15 @@ ffi.metatype("struct objc_class", {
 
                 if ffi.istype(_idType, ret) and ret ~= nil then
                     _classNameCache[ret] = className
-                    --if ret:retainCount() ~= _UINT_MAX then
-                        if (selStr:sub(1,5) ~= "alloc" and selStr ~= "new")  then
-                            if objc.debug then
-                                _log("Retaining object of class", ffi.string(C.class_getName(ret:class())), ffi.cast("void*", ret))
-                            end
-                            ret:retain()
+                    if (selStr:sub(1,5) ~= "alloc" and selStr ~= "new")  then
+                        if objc.debug then
+                            _log("Retaining object of class (sel:"..selStr..")", ffi.string(C.class_getName(ret:class())), ffi.cast("void*", ret))
                         end
-                        if selStr:sub(1,5) ~= "alloc" then
-                            ret = ffi.gc(ret, _release)
-                        end
-                    --end
+                        ret = C.objc_retain(ret)
+                    end
+                    if selStr:sub(1,5) ~= "alloc" then
+                        ret = ffi.gc(ret, _release)
+                    end
                 end
                 return ret
             end
@@ -596,16 +596,13 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
 
             if ffi.istype(_idType, ret) and ret ~= nil and not (selStr == "retain" or selStr == "release") then
                 _classNameCache[ret] = ffi.string(C.object_getClassName(ret))
-                -- If the retain count is UINT_MAX that means that the object should not be released
-                --if ret:retainCount() ~= _UINT_MAX then
-                    if not (selStr:sub(1,4) == "init" or selStr:sub(1,4) == "copy" or selStr:sub(1,11) == "mutableCopy") then
-                        if objc.debug then
-                            _log("Retaining object of class", ffi.string(C.class_getName(ret:class())), ffi.cast("void*", ret))
-                        end
-                        ret:retain()
+                if not (selStr:sub(1,4) == "init" or selStr:sub(1,4) == "copy" or selStr:sub(1,11) == "mutableCopy") then
+                    if objc.debug then
+                        _log("Retaining object of class (sel:"..selStr..")", ffi.string(C.class_getName(ret:class())), ffi.cast("void*", ret))
                     end
-                    ret = ffi.gc(ret, _release)
-                --end
+                    ret = C.objc_retain(ret)
+                end
+                ret = ffi.gc(ret, _release)
             end
             return ret
         end
