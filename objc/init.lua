@@ -69,8 +69,6 @@ typedef struct objc_ivar *Ivar;
 id objc_msgSend(id theReceiver, SEL theSelector, ...);
 Class objc_allocateClassPair(Class superclass, const char *name, size_t extraBytes);
 void objc_registerClassPair(Class cls);
-id objc_retain(id obj);
-void objc_release(id obj);
 
 Class objc_getClass(const char *name);
 const char *class_getName(Class cls);
@@ -144,7 +142,7 @@ local function _release(obj)
     if objc.debug then
         _log("Releasing object of class", ffi.string(C.class_getName(obj:class())), ffi.cast("void*", obj), "Refcount: ", obj:retainCount())
     end
-    C.objc_release(obj)
+    obj:release()
 end
 
 setmetatable(objc, {
@@ -537,7 +535,7 @@ ffi.metatype("struct objc_class", {
                         if objc.debug then
                             _log("Retaining object of class (sel:"..selStr..")", ffi.string(C.class_getName(ret:class())), ffi.cast("void*", ret))
                         end
-                        ret = C.objc_retain(ret)
+                        ret = ret:retain()
                     end
                     if selStr:sub(1,5) ~= "alloc" then
                         ret = ffi.gc(ret, _release)
@@ -600,7 +598,7 @@ function objc.getInstanceMethodCaller(realSelf,selArg)
                     if objc.debug then
                         _log("Retaining object of class (sel:"..selStr..")", ffi.string(C.class_getName(ret:class())), ffi.cast("void*", ret))
                     end
-                    ret = C.objc_retain(ret)
+                    ret = ret:retain()
                 end
                 ret = ffi.gc(ret, _release)
             end
