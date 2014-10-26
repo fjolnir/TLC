@@ -119,13 +119,15 @@ local _parseCallbacks = {
             local sig       = _curObj.retval..table.concat(_curObj.args)
             local signature = objc.impSignatureForTypeEncoding(sig, _curObj.name)
             if signature ~= nil then
+                local obj = _curObj
+                
                 bs[_curObj.name] = function(...)
                     print("lazy loading fun")
-                    bs[_curObj.name] = ffi.cdef(signature)
+                    bs[obj.name] = ffi.cdef(signature)
                     if _loadingGlobally == true then
-                        _G[_curObj.name] = C[_curObj.name]
+                        _G[obj.name] = C[obj.name]
                     end
-                    return bs[_curObj.name](...)
+                    return bs[obj.name](...)
                 end
                 if _loadingGlobally == true then
                     _G[_curObj.name] = bs[_curObj.name]
